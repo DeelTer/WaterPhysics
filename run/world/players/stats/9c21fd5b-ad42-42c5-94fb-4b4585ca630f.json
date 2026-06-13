@@ -1,0 +1,36 @@
+{
+  "stats": {
+    "minecraft:picked_up": {
+      "minecraft:dirt": 7,
+      "minecraft:cobblestone": 8,
+      "minecraft:big_dripleaf": 1
+    },
+    "minecraft:custom": {
+      "minecraft:time_since_rest": 6001,
+      "minecraft:walk_one_cm": 878,
+      "minecraft:walk_under_water_one_cm": 113,
+      "minecraft:damage_taken": 25,
+      "minecraft:play_time": 6001,
+      "minecraft:jump": 8,
+      "minecraft:time_since_death": 6001,
+      "minecraft:sprint_one_cm": 247,
+      "minecraft:fall_one_cm": 300,
+      "minecraft:swim_one_cm": 577,
+      "minecraft:total_world_time": 6001,
+      "minecraft:fly_one_cm": 43267,
+      "minecraft:walk_on_water_one_cm": 2337,
+      "minecraft:crouch_one_cm": 59,
+      "minecraft:sneak_time": 255
+    },
+    "minecraft:mined": {
+      "minecraft:dirt": 3,
+      "minecraft:grass_block": 6,
+      "minecraft:stone": 9
+    },
+    "minecraft:used": {
+      "minecraft:water_bucket": 6,
+      "minecraft:diamond_pickaxe": 11
+    }
+  },
+  "DataVersion": 4790
+}

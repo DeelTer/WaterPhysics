@@ -1,0 +1,9 @@
+name: water
+api-version: 1.15
+main: me.RealisticWater.Main
+version: 1.9.11 BETA
+Authors: [AsVaidas]
+description: 'Realistic water mechanics plugin - adds more control over water, makes water "realistic" and adds cool stuff'
+commands:
+  water:
+    description: 'Plugin description'

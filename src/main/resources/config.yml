@@ -1,0 +1,118 @@
+# ============================================================
+#   WaterPhysics Configuration
+#   All values are cached as primitives at startup.
+#   Changes require /wp reload (or server restart).
+# ============================================================
+
+# Enable water physics on server start
+enabled: true
+
+# Worlds where water physics is active.
+# Use ["*"] to enable in ALL worlds.
+worlds:
+  - "*"
+
+# ---- Flow Settings ----------------------------------------
+flow:
+  # interaction-only mode: water physics triggers ONLY when a player
+  # places or breaks a block adjacent to water.
+  # Like sand/gravel physics — disturb a block to start the chain reaction.
+  # Prevents CPU waste on static water (oceans, ponds, rivers).
+  # Disable if you need water to flow in unloaded areas or via commands/datapacks.
+  interaction-only: true
+
+  # Max blocks processed per tick.
+  # Higher = more responsive water, but more CPU per tick.
+  # Recommended: 256-1024. Tweak if you notice lag or slow water.
+  batch-size: 512
+
+  # Ticks between each processing run (1 = every tick).
+  tick-interval: 5
+
+# ---- Optimization -----------------------------------------
+optimization:
+  # Only process water blocks in chunks near online players.
+  # Disabling this processes water EVERYWHERE (expensive on large servers).
+  player-proximity-check: true
+
+  # Chunk radius around each player to process.
+  # 4 = 9x9 chunk area (~144 chunks) per player.
+  player-proximity-chunks: 4
+
+  # How many seconds a cached block state stays valid without access.
+  # Higher = fewer world reads, more RAM used.
+  cache-ttl-seconds: 60
+
+  # Maximum number of block states held in cache (per world).
+  # LRU eviction when limit is hit. 100k ≈ 3-4 MB.
+  cache-max-size: 100000
+
+  # When a chunk loads (e.g. player flies back to a draining area),
+  # scan it for flowing water and re-queue those blocks so the drain continues.
+  # Has no effect when interaction-only is true.
+  chunk-rescan-on-load: true
+
+  # Max water blocks re-queued per chunk on load.
+  # Prevents queue explosion if an ocean chunk loads with thousands of sources.
+  chunk-scan-max-blocks: 2000
+
+  # Biomes where water physics is completely disabled.
+  # Useful for skipping natural oceans, rivers, etc. that you don't want disturbed.
+  # Use lowercase biome keys (e.g. "ocean", "deep_ocean"). Empty list = all biomes active.
+  excluded-biomes:
+    - ocean
+    - deep_ocean
+    - warm_ocean
+    - lukewarm_ocean
+    - cold_ocean
+    - frozen_ocean
+    - deep_cold_ocean
+    - deep_frozen_ocean
+    - deep_lukewarm_ocean
+    - river
+    - frozen_river
+
+# ---- Waterlogged Blocks ------------------------------------
+# Controls whether nearby blocks (stairs, slabs, fences, etc.) get waterlogged
+# when water flows around them, and unwaterlogged when water recedes.
+# This creates a realistic visual of rising/falling water levels.
+waterlogged:
+  # Enable waterlogging feature.
+  enabled: true
+
+  # Water at this level OR LOWER causes adjacent waterloggable blocks to become
+  # waterlogged.  Water ABOVE this level causes them to be unwaterlogged.
+  # Scale: 0 = source (full), 7 = barely flowing.
+  # Default 3 = roughly "more than half full" triggers waterlogging.
+  max-level: 3
+
+# ---- Sea Plants -------------------------------------------
+sea-plants:
+  # Replace seagrass / kelp / bubble columns with water when water flows into them.
+  remove-on-flow: true
+
+  # Prevent seagrass and kelp from growing / spreading.
+  prevent-growth: true
+
+# ---- Lava Interaction -------------------------------------
+lava:
+  # Convert flowing lava to cobblestone when touched by water.
+  convert-to-cobblestone: true
+
+  # Convert lava SOURCE blocks to obsidian when touched by water.
+  convert-source-to-obsidian: true
+
+# ---- Sounds -----------------------------------------------
+sounds:
+  # Play water sounds as water flows to new blocks.
+  enabled: true
+
+  # Minimum ticks between sounds in the same chunk.
+  # Lower = more frequent (can feel noisy). Recommended: 8-20.
+  rate-limit-ticks: 10
+
+  # Volume (0.0 - 1.0).
+  volume: 0.35
+
+  # Pitch center (randomised ±0.2 each play for variation).
+  pitch: 1.0

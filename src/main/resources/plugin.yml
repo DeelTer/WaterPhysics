@@ -1,0 +1,19 @@
+name: WaterPhysics
+main: ru.deelter.waterphysics.WaterPhysics
+version: ${version}
+api-version: '1.21'
+authors:
+  - deelter
+description: Realistic water physics with maximum performance optimization
+
+commands:
+  waterphysics:
+    description: WaterPhysics management command
+    aliases: [ wp, water ]
+    permission: waterphysics.admin
+    usage: /wp <reload|enable|disable|stop|status>
+
+permissions:
+  waterphysics.admin:
+    description: Access to WaterPhysics admin commands
+    default: op

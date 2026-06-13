@@ -1,0 +1,50 @@
+plugins {
+    id("java-library")
+    id("xyz.jpenilla.run-paper") version "3.0.2"
+    id("io.freefair.lombok") version "9.5.0"
+    id("com.gradleup.shadow") version "9.0.0"
+}
+
+group = "ru.deelter"
+version = "1.1.0"
+
+repositories {
+    mavenCentral()
+    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.codemc.io/repository/maven-public/")
+}
+
+dependencies {
+    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+}
+
+tasks {
+    runServer {
+        minecraftVersion("26.1.2")
+        jvmArgs("-Xms2G", "-Xmx2G", "-Dcom.mojang.eula.agree=true")
+    }
+
+    shadowJar {
+        archiveClassifier = ""
+        relocate("com.github.benmanes.caffeine", "ru.deelter.waterphysics.libs.caffeine")
+        minimize {
+            exclude(dependency("com.github.ben-manes.caffeine:.*"))
+        }
+    }
+
+    processResources {
+        val props = mapOf("version" to version)
+        filesMatching("plugin.yml") {
+            expand(props)
+        }
+    }
+
+    build {
+        dependsOn(shadowJar)
+    }
+}
