@@ -191,7 +191,7 @@ public final class FlowEngine extends BukkitRunnable {
     // =========================================================================
 
     private void flowDown(World world, int x, int y, int z, int level) {
-        // Wake horizontal neighbours for re-evaluation
+        // Wake horizontal neighbours for re-evaluation in case they also fall
         for (int i = 0; i < 4; i++) {
             queue.enqueue(world, x + DX[i], y, z + DZ[i]);
         }

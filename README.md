@@ -4,6 +4,17 @@
 
 ## Changelog
 
+### v1.2.0 — Interaction-only mode + optimizations
+- ✅ **Interaction-only mode** (`flow.interaction-only: true`) — вода течёт ТОЛЬКО при взаимодействии игрока (place/break). Статическая вода (океаны, реки) не обрабатывается, экономия CPU
+- ✅ **Biome exclusion** (`optimization.excluded-biomes`) — полностью отключить физику в конкретных биомах (океан, река). Per-4×4×4 section cache для быстрой проверки
+- ✅ **Bucket mechanics** (`bucket.enabled`) — при размещении water bucket ре-квеуются все блоки в radius, позволяя воде переливаться из новой точки
+- ✅ **Block.breakNaturally()** для TYPE_PLANT при затоплении — moss carpet, carpets, grass теперь дропают предметы вместо исчезновения
+- ✅ **Sounds** (`sounds.enabled`) — BLOCK_WATER_AMBIENT с рейт-лимитом per-chunk, random pitch ±0.2
+- ✅ **Water level equalization** (`flow.equalize-water-levels`, DISABLED) — попытка сгладить уровни соседних блоков (в разработке, есть баги с дупликацией)
+- ✅ **BucketListener** — слушатель PlayerBucketEmptyEvent, deferred 1 tick для правильной синхронизации
+- ✅ **Lombok** для @Getter/@RequiredArgsConstructor, сокращение boilerplate
+- ✅ **Shadow 9.0.0** для поддержки Java 25 (class version 69)
+
 ### v1.1.0 — Waterlogged + chunk continuity
 - ✅ **ChunkListener** — при загрузке чанка все водные блоки ре-квеуются. Критично для сценария "дыра в океане + чанк выгрузился"
 - ✅ **Waterlogged поддержка** — ступеньки, плиты, заборы и любые waterloggable блоки автоматически waterlog/unwaterlog по уровню воды рядом. Конфигурируемый порог (`waterlogged.max-level`)
@@ -85,12 +96,24 @@ WaterPhysics/
         │   │                              registers water в queue
         │   │                              prevent seagrass growth (config)
         │   │
-        │   └── BlockListener.java       ← cache invalidation при break/place
-        │                                   re-queue соседей воды
+        │   ├── BlockListener.java       ← cache invalidation при break/place
+        │   │                              re-queue соседей воды
+        │   │
+        │   ├── ChunkListener.java       ← rescan water при chunk load
+        │   │                              guard: не работает в interaction-only
+        │   │
+        │   └── BucketListener.java      ← player bucket placement
+        │                                   re-queue соседей при placement
         │
-        └── command/
-            └── WaterCommand.java        ← /wp reload|enable|disable|stop|status
-                                            TabCompletion поддержка
+        ├── command/
+        │   └── WaterCommand.java        ← /wp reload|enable|disable|stop|status
+        │                                   TabCompletion поддержка
+        │
+        └── util/
+            ├── BlockKey.java            ← encode (x,y,z) → long для HashMap
+            │                              bit layout: [X:26][Y:12][Z:26]
+            │
+            └── (future utilities)
 
         ├── util/
         │   └── BlockKey.java            ← encode (x,y,z) → long
@@ -130,12 +153,20 @@ worlds:
                                            # Или список: ["world", "world_nether"]
 
 flow:
-  batch-size: 256                          # Сколько блоков обработать за тик
+  interaction-only: true                   # Если true: вода течёт ТОЛЬКО при break/place
+                                           # (как песок/гравий). Статическая вода не
+                                           # обрабатывается. Экономия CPU для океанов
+  
+  batch-size: 512                          # Сколько блоков обработать за тик
                                            # Выше = быстрее вода, но больше CPU
-                                           # Рекомендация: 128-512
+                                           # Рекомендация: 256-1024
 
-  tick-interval: 1                         # Тики между запусками двигателя
-                                           # 1 = каждый тик, 2 = через раз
+  tick-interval: 3                         # Тики между запусками двигателя
+                                           # 1 = каждый тик, 3 = раз в 3 тика
+  
+  equalize-water-levels: false             # Если true: более полный блок водный постепенно
+                                           # поднимает уровень соседних менее полных блоков.
+                                           # ОТКЛЮЧЕНО — есть баги с дупликацией воды
 ```
 
 ### Оптимизация
@@ -145,26 +176,58 @@ optimization:
   player-proximity-check: true             # Обработка только рядом с игроками
                                            # true = экономия CPU, false = везде
 
-  player-proximity-chunks: 4               # Radius в chunk'ах (4 = 9x9)
+  player-proximity-chunks: 4               # Radius в chunk'ах (4 = 9x9 chunks = ~144)
 
   cache-ttl-seconds: 60                    # Кеш-запись невалидна через N сек
                                            # Выше = меньше world reads, больше RAM
 
   cache-max-size: 100000                   # Max block'ов в памяти (LRU)
                                            # 100k ≈ 3-4 MB, автоматический evict
+  
+  chunk-rescan-on-load: true               # Переквеуить воду при загрузке chunk
+                                           # Критично для ocean drain сценария
+  
+  chunk-scan-max-blocks: 2000              # Max water блоков за один rescan
+  
+  excluded-biomes:                         # Биомы где физика отключена полностью
+    - ocean                                # (ocean, deep_ocean, river, frozen_ocean и т.д.)
+    - deep_ocean                           # Пусто = физика везде
+    - river
 ```
 
 ### Механика
 
 ```yaml
+waterlogged:
+  enabled: true                            # Водяные свойства соседних блоков
+                                           # (stairs, slabs, fences автоматически waterlog)
+  
+  max-level: 3                             # Уровень воды при котором блоки waterlog
+                                           # 0=source, 7=barely flowing
+
 sea-plants:
   remove-on-flow: true                     # Заменять seagrass/kelp на воду
+                                           # block.breakNaturally() дропит предметы
 
   prevent-growth: true                     # Запретить рост растений
+
+bucket:
+  enabled: true                            # Переквеуить воду при размещении bucket
+  
+  scan-radius: 8                           # Radius в блоках вокруг placement point
 
 lava:
   convert-to-cobblestone: true             # Лава → булыжник при контакте
   convert-source-to-obsidian: true         # Лава-источник → обсидиан
+
+sounds:
+  enabled: true                            # Играть BLOCK_WATER_AMBIENT при потоке
+  
+  rate-limit-ticks: 10                     # Min тиков между звуками в одном chunk
+  
+  volume: 0.35                             # Громкость (0.0-1.0)
+  
+  pitch: 1.0                               # Основной pitch (±0.2 рандом)
 ```
 
 ---
@@ -257,13 +320,23 @@ run() каждые N тиков:
 ### Event listeners
 
 **WaterEventListener** → перехватывает vanilla BlockFromTo
-- Отменяет водопад
-- Кеширует блоки
+- Отменяет водопад (если не interaction-only, иначе just отменяет)
+- Кеширует блоки (preload)
 - Кушает в очередь
 
-**BlockListener** → синхронизирует кеш
+**BlockListener** → синхронизирует кеш при player build/break
 - На break: invalidate + re-queue соседей
 - На place: preload + re-queue соседей
+
+**ChunkListener** → ре-квеуит воду при загрузке chunk
+- Сканирует chunk на WATER блоки
+- Переквеуит если не interaction-only
+- Guard: max-blocks per rescan
+
+**BucketListener** → обновляет воду при bucket placement
+- PlayerBucketEmptyEvent на WATER_BUCKET
+- Deferred 1 tick (placed water не в мире сразу)
+- Ре-квеуит блоки в radius вокруг placement
 
 ---
 
@@ -371,9 +444,22 @@ A: `cache-max-size` уменьшить (например, до 50k). Или `cac
 
 ## Требования
 
-- Java 21+
-- Paper/Spigot 1.21.0+
+- Java 25+
+- Paper 26.1.2+ (1.21.3+)
 - Gradle 8.0+ (для сборки)
+- Shadow Plugin 9.0.0+ (поддерживает class version 69)
+
+---
+
+---
+
+## Known Issues
+
+### Water level equalization
+- **Status:** DISABLED by default (`flow.equalize-water-levels: false`)
+- **Issue:** Water duplication при попытке выравнять уровни соседних блоков
+- **Workaround:** Не включать конфиг опцию
+- **Notes:** Логика требует переработки — нельзя просто re-queue соседей без контроля потока
 
 ---
 
@@ -384,6 +470,8 @@ A: `cache-max-size` уменьшить (например, до 50k). Или `cac
 - `1.x.0` — новые фичи (механика, конфиги)
 - `1.0.x` — баги, оптимизация
 - `2.0.0` — breaking API change
+
+Текущая версия: **1.2.0** (WIP: equalization fix)
 
 ---
 

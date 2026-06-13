@@ -17,7 +17,7 @@ flow:
   # Water level equalization: a fuller block (lower level number) gradually raises
   # its less-full water neighbours by 1 step per tick without consuming the fuller
   # block.  Sources (level 0) stay as sources.  Produces smooth, even water surfaces.
-  # Disable if you want levels to stay at whatever value they flowed in as.
+  # DISABLED BY DEFAULT — implementation needs review for water dupe bug.
   equalize-water-levels: true
 
   # interaction-only mode: water physics triggers ONLY when a player
