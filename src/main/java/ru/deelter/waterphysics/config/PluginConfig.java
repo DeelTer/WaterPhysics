@@ -31,6 +31,7 @@ public final class PluginConfig {
 
     // Flow
     private final boolean interactionOnly;
+    private final boolean equalizeWaterLevels;
     private final int batchSize;
     private final int tickInterval;
 
@@ -80,6 +81,7 @@ public final class PluginConfig {
         this.excludedBiomes       = Collections.unmodifiableSet(biomes);
 
         this.interactionOnly      = cfg.getBoolean("flow.interaction-only", true);
+        this.equalizeWaterLevels  = cfg.getBoolean("flow.equalize-water-levels", true);
         this.batchSize            = Math.max(1,   cfg.getInt("flow.batch-size", 512));
         this.tickInterval         = Math.max(1,   cfg.getInt("flow.tick-interval", 1));
 

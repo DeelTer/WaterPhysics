@@ -71,6 +71,7 @@ public final class FlowEngine extends BukkitRunnable {
     private final boolean waterlogEnabled;
     private final int     waterlogMaxLevel;
     private final boolean biomeExclusionEnabled;
+    private final boolean equalizeWaterLevels;
     private final boolean soundsEnabled;
     private final int     soundRateLimitTicks;
     private final float   soundVolume;
@@ -102,6 +103,7 @@ public final class FlowEngine extends BukkitRunnable {
         this.waterlogEnabled     = config.isWaterlogEnabled();
         this.waterlogMaxLevel    = config.getWaterlogMaxLevel();
         this.biomeExclusionEnabled  = !config.getExcludedBiomes().isEmpty();
+        this.equalizeWaterLevels    = config.isEqualizeWaterLevels();
         this.soundsEnabled          = config.isSoundsEnabled();
         this.soundRateLimitTicks    = config.getSoundRateLimitTicks();
         this.soundVolume            = config.getSoundVolume();
@@ -267,12 +269,11 @@ public final class FlowEngine extends BukkitRunnable {
 
             } else if (ntype == TYPE_WATER) {
                 int nLevel = getLevel(world, nx, y, nz);
-                if (nLevel - 1 > blockdata) {
-                    while (nLevel - 1 > blockdata && blockdata < 8) {
-                        nLevel--;
-                        blockdata++;
-                    }
-                    applyLevel(world, nx, y, nz, nLevel);
+                // Neighbour is less full (higher level number) by more than 1 step.
+                // Raise it 1 step toward current fullness; current block is NOT consumed.
+                // This creates a non-destructive equalization wave from sources outward.
+                if (equalizeWaterLevels && nLevel > blockdata + 1) {
+                    applyLevel(world, nx, y, nz, nLevel - 1);
                 }
 
             } else if (ntype == TYPE_LAVA && convertLava) {

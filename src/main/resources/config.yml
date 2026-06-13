@@ -14,6 +14,12 @@ worlds:
 
 # ---- Flow Settings ----------------------------------------
 flow:
+  # Water level equalization: a fuller block (lower level number) gradually raises
+  # its less-full water neighbours by 1 step per tick without consuming the fuller
+  # block.  Sources (level 0) stay as sources.  Produces smooth, even water surfaces.
+  # Disable if you want levels to stay at whatever value they flowed in as.
+  equalize-water-levels: true
+
   # interaction-only mode: water physics triggers ONLY when a player
   # places or breaks a block adjacent to water.
   # Like sand/gravel physics — disturb a block to start the chain reaction.
@@ -27,7 +33,7 @@ flow:
   batch-size: 512
 
   # Ticks between each processing run (1 = every tick).
-  tick-interval: 5
+  tick-interval: 3
 
 # ---- Optimization -----------------------------------------
 optimization:
