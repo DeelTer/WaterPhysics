@@ -552,6 +552,9 @@ public final class FlowEngine extends BukkitRunnable {
         long key = BlockKey.of(x, y, z);
         UUID wid = world.getUID();
 
+        byte oldLevel = cache.getLevel(world, x, y, z);
+        if (oldLevel == (byte) level) return; // Level unchanged — do not re-queue
+
         Block block = world.getBlockAt(x, y, z);
         if (block.getType() == Material.WATER && block.getBlockData() instanceof Levelled ld) {
             ld.setLevel(level);
