@@ -255,6 +255,19 @@ public final class FlowEngine extends BukkitRunnable {
         // blockdata mutates across the loop — intentional degradation per spread direction
         int blockdata = originalLevel;
 
+        // Level equalization is only safe when this block has NO open (air/plant) neighbours.
+        // If there is an open edge, the block should flow there normally; equalizing would
+        // raise neighbour levels, those neighbours re-queue, find air, spread → water dupe.
+        // Surrounded-by-water blocks can safely equalise: they cannot spread to air themselves.
+        boolean canEqualize = false;
+        if (equalizeWaterLevels && blockdata < 7) {
+            canEqualize = true;
+            for (int i = 0; i < 4; i++) {
+                byte t = getType(world, x + DX[i], y, z + DZ[i]);
+                if (t == TYPE_AIR || t == TYPE_PLANT) { canEqualize = false; break; }
+            }
+        }
+
         for (int i = 0; i < 4; i++) {
             if (blockdata >= 7) break;
 
@@ -269,10 +282,10 @@ public final class FlowEngine extends BukkitRunnable {
 
             } else if (ntype == TYPE_WATER) {
                 int nLevel = getLevel(world, nx, y, nz);
-                // Neighbour is less full (higher level number) by more than 1 step.
-                // Raise it 1 step toward current fullness; current block is NOT consumed.
-                // This creates a non-destructive equalization wave from sources outward.
-                if (equalizeWaterLevels && nLevel > blockdata + 1) {
+                // Raise less-full neighbour by 1 step — non-destructive, current level unchanged.
+                // Guard: only when no open edge exists (canEqualize), so equalized neighbours
+                // cannot then spread to air and create extra water.
+                if (canEqualize && nLevel > blockdata + 1) {
                     applyLevel(world, nx, y, nz, nLevel - 1);
                 }
 
