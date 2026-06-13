@@ -252,25 +252,10 @@ public final class FlowEngine extends BukkitRunnable {
     // =========================================================================
 
     private void flowSideways(World world, int x, int y, int z, int originalLevel) {
-        // blockdata mutates across the loop — intentional degradation per spread direction
         int blockdata = originalLevel;
 
-        // Level equalization is only safe when this block has NO open (air/plant) neighbours.
-        // If there is an open edge, the block should flow there normally; equalizing would
-        // raise neighbour levels, those neighbours re-queue, find air, spread → water dupe.
-        // Surrounded-by-water blocks can safely equalise: they cannot spread to air themselves.
-        boolean canEqualize = false;
-        if (equalizeWaterLevels && blockdata < 7) {
-            canEqualize = true;
-            for (int i = 0; i < 4; i++) {
-                byte t = getType(world, x + DX[i], y, z + DZ[i]);
-                if (t == TYPE_AIR || t == TYPE_PLANT) { canEqualize = false; break; }
-            }
-        }
-
-        for (int i = 0; i < 4; i++) {
-            if (blockdata >= 7) break;
-
+        // ----- 1. Распространение в воздух / растения / лаву / водопроницаемые -----
+        for (int i = 0; i < 4 && blockdata < 7; i++) {
             int  nx    = x + DX[i];
             int  nz    = z + DZ[i];
             byte ntype = getType(world, nx, y, nz);
@@ -279,30 +264,46 @@ public final class FlowEngine extends BukkitRunnable {
                 int spreadLevel = spreadLevel(blockdata);
                 blockdata       = nextBlockdata(blockdata);
                 setWater(world, nx, y, nz, spreadLevel);
-
-            } else if (ntype == TYPE_WATER) {
-                int nLevel = getLevel(world, nx, y, nz);
-                // Raise less-full neighbour by 1 step — non-destructive, current level unchanged.
-                // Guard: only when no open edge exists (canEqualize), so equalized neighbours
-                // cannot then spread to air and create extra water.
-                if (canEqualize && nLevel > blockdata + 1) {
-                    applyLevel(world, nx, y, nz, nLevel - 1);
-                }
-
             } else if (ntype == TYPE_LAVA && convertLava) {
                 boolean isSource = getLevel(world, nx, y, nz) == 0;
                 Material result  = (isSource && convertLavaSource) ? Material.OBSIDIAN : Material.COBBLESTONE;
                 setSolid(world, nx, y, nz, result);
                 blockdata++;
-
             } else if (waterlogEnabled && (ntype == TYPE_OTHER || ntype == TYPE_WATERLOGGED)) {
-                // Waterlogging side-effect: update adjacent waterloggable solid blocks
                 updateWaterlog(world, nx, y, nz, blockdata);
             }
         }
 
+        // ----- 2. Выравнивание уровней (только если нет открытых соседей) -----
+        if (equalizeWaterLevels && blockdata < 7 && blockdata >= 0) {
+            boolean hasAirNeighbor = false;
+            for (int i = 0; i < 4; i++) {
+                byte t = getType(world, x + DX[i], y, z + DZ[i]);
+                if (t == TYPE_AIR || t == TYPE_PLANT) {
+                    hasAirNeighbor = true;
+                    break;
+                }
+            }
+            if (!hasAirNeighbor) {
+                for (int i = 0; i < 4 && blockdata < 7; i++) {
+                    int  nx    = x + DX[i];
+                    int  nz    = z + DZ[i];
+                    byte ntype = getType(world, nx, y, nz);
+                    if (ntype == TYPE_WATER) {
+                        int nLevel = getLevel(world, nx, y, nz);
+                        if (nLevel > blockdata + 1) {
+                            nLevel--;
+                            blockdata++;
+                            applyLevel(world, nx, y, nz, nLevel);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Применить итоговый уровень (applyLevel сам обработает случай >=8)
         if (blockdata != originalLevel) {
-            applyLevel(world, x, y, z, blockdata); // applyLevel handles blockdata>=8 → setAir
+            applyLevel(world, x, y, z, blockdata);
         }
     }
 
