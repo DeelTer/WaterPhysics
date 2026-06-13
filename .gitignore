@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+*.gradle.kts.bak
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project
+*.jar
+*.class
+*.log
+
+# Config
+config.yml
+plugins/
+
+# OS
+Thumbs.db
+.DS_Store
+/run/
