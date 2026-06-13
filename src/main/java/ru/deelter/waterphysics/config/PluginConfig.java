@@ -50,6 +50,10 @@ public final class PluginConfig {
     private final boolean removeSeaPlants;
     private final boolean preventSeaPlantGrowth;
 
+    // Bucket
+    private final boolean bucketPhysicsEnabled;
+    private final int     bucketScanRadius;
+
     // Lava
     private final boolean convertLava;
     private final boolean convertLavaSource;
@@ -91,6 +95,9 @@ public final class PluginConfig {
 
         this.removeSeaPlants      = cfg.getBoolean("sea-plants.remove-on-flow", true);
         this.preventSeaPlantGrowth = cfg.getBoolean("sea-plants.prevent-growth", true);
+
+        this.bucketPhysicsEnabled = cfg.getBoolean("bucket.enabled", true);
+        this.bucketScanRadius     = Math.max(1, Math.min(16, cfg.getInt("bucket.scan-radius", 8)));
 
         this.convertLava          = cfg.getBoolean("lava.convert-to-cobblestone", true);
         this.convertLavaSource    = cfg.getBoolean("lava.convert-source-to-obsidian", true);

@@ -13,6 +13,7 @@ import ru.deelter.waterphysics.config.PluginConfig;
 import ru.deelter.waterphysics.engine.FlowEngine;
 import ru.deelter.waterphysics.engine.WaterQueue;
 import ru.deelter.waterphysics.listener.BlockListener;
+import ru.deelter.waterphysics.listener.BucketListener;
 import ru.deelter.waterphysics.listener.ChunkListener;
 import ru.deelter.waterphysics.listener.WaterEventListener;
 
@@ -102,6 +103,7 @@ public final class WaterPhysics extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new WaterEventListener(config, cache, queue), this);
         getServer().getPluginManager().registerEvents(new BlockListener(cache, queue), this);
         getServer().getPluginManager().registerEvents(new ChunkListener(config, cache, queue, this), this);
+        getServer().getPluginManager().registerEvents(new BucketListener(config, cache, queue, this), this);
     }
 
     private void loadConfig() {

@@ -94,6 +94,18 @@ sea-plants:
   # Prevent seagrass and kelp from growing / spreading.
   prevent-growth: true
 
+# ---- Bucket Mechanics -------------------------------------
+bucket:
+  # When a player places a water bucket near/into water, re-evaluate all water
+  # blocks within scan-radius so the body tries to spread or overflow.
+  # Note: true upward "rising" requires hydrostatic pressure (not implemented).
+  # What this does: if the water body has any open edge, it will find and fill it.
+  enabled: true
+
+  # Horizontal scan radius around the placement point (blocks).
+  # Larger = more water gets re-evaluated per bucket use (more spread, more CPU).
+  scan-radius: 8
+
 # ---- Lava Interaction -------------------------------------
 lava:
   # Convert flowing lava to cobblestone when touched by water.
