@@ -35,6 +35,10 @@ public final class PluginConfig {
     private final int batchSize;
     private final int tickInterval;
 
+    // Puddle removal (evaporate stranded thin films with nowhere to flow)
+    private final boolean removePuddles;
+    private final int     removePuddleMaxUnits;
+
     // Optimization
     private final boolean playerProximityCheck;
     private final int     playerProximityChunks;
@@ -84,6 +88,9 @@ public final class PluginConfig {
         this.equalizeWaterLevels  = cfg.getBoolean("flow.equalize-water-levels", true);
         this.batchSize            = Math.max(1,   cfg.getInt("flow.batch-size", 512));
         this.tickInterval         = Math.max(1,   cfg.getInt("flow.tick-interval", 1));
+
+        this.removePuddles        = cfg.getBoolean("flow.remove-puddles", true);
+        this.removePuddleMaxUnits = Math.max(1, Math.min(7, cfg.getInt("flow.puddle-max-units", 1)));
 
         this.playerProximityCheck = cfg.getBoolean("optimization.player-proximity-check", true);
         this.playerProximityChunks = Math.max(1,  cfg.getInt("optimization.player-proximity-chunks", 4));

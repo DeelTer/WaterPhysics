@@ -7,7 +7,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
+
+import java.util.List;
 import ru.deelter.waterphysics.cache.BlockStateCache;
 import ru.deelter.waterphysics.engine.WaterQueue;
 import ru.deelter.waterphysics.util.BlockKey;
@@ -35,6 +39,29 @@ public final class BlockListener implements Listener {
             queue.enqueue(block.getWorld(), block.getX(), block.getY(), block.getZ());
         }
         invalidateAndQueueNeighbours(block);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        handleExplosion(event.blockList());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        handleExplosion(event.blockList());
+    }
+
+    /**
+     * Explosions destroy many blocks at once (TNT, creeper, bed/anchor) via
+     * the explode events — not BlockBreakEvent. Each removed block opens a hole
+     * water must flow into, so invalidate + wake neighbours for every one.
+     * The blocks are still present at MONITOR time; the engine re-reads them
+     * next tick once vanilla has cleared them.
+     */
+    private void handleExplosion(List<Block> blocks) {
+        for (Block block : blocks) {
+            invalidateAndQueueNeighbours(block);
+        }
     }
 
     private void invalidateAndQueueNeighbours(Block changed) {

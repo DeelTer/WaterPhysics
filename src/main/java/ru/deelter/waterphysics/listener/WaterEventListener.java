@@ -42,6 +42,9 @@ public final class WaterEventListener implements Listener {
 
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onBlockPhysics(BlockPhysicsEvent event) {
+		// Only suppress vanilla physics in worlds we manage — elsewhere water
+		// must behave normally (vanilla).
+		if (!config.isWorldEnabled(event.getBlock().getWorld().getName())) return;
 		Material mat = event.getBlock().getType();
 		if (mat == Material.WATER || isSeaPlant(mat)) {
 			event.setCancelled(true);

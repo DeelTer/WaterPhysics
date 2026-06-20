@@ -7,8 +7,10 @@
 # Enable water physics on server start
 enabled: true
 
-# Worlds where water physics is active.
-# Use ["*"] to enable in ALL worlds.
+# Worlds where water physics is active (whitelist).
+# Use ["*"] (or leave empty) to enable in ALL worlds.
+# Otherwise list world names: ["world", "world_nether"].
+# In worlds NOT listed, water behaves 100% vanilla (plugin does not touch it).
 worlds:
   - "*"
 
@@ -34,6 +36,16 @@ flow:
 
   # Ticks between each processing run (1 = every tick).
   tick-interval: 3
+
+  # Evaporate stranded thin films: a small flowing block left with nowhere to
+  # flow (no fuller neighbour, no drop, no reachable drain) is removed instead
+  # of hanging forever as a tiny puddle.
+  remove-puddles: true
+
+  # Max water "units" a film may have to still count as a removable puddle.
+  # 1 = only the thinnest layer (level 7).  Higher = removes deeper leftovers.
+  # Range 1-7.
+  puddle-max-units: 1
 
 # ---- Optimization -----------------------------------------
 optimization:
