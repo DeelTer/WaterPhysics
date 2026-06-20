@@ -99,14 +99,12 @@ public final class BlockListener implements Listener {
         int y = changed.getY();
         int z = changed.getZ();
 
+        // Enqueue ALL six neighbours unconditionally. We must not gate on the
+        // cached type here: the cache may be stale or cold and would skip real
+        // fluid, leaving the freed gap unfilled. The engine cheaply ignores any
+        // neighbour that turns out not to be a fluid.
         for (int i = 0; i < 6; i++) {
-            int nx = x + DX[i];
-            int ny = y + DY[i];
-            int nz = z + DZ[i];
-            byte ntype = cache.getType(changed.getWorld(), nx, ny, nz);
-            if (ntype == BlockStateCache.TYPE_WATER || ntype == BlockStateCache.TYPE_LAVA) {
-                queue.enqueue(changed.getWorld(), nx, ny, nz);
-            }
+            queue.enqueue(changed.getWorld(), x + DX[i], y + DY[i], z + DZ[i]);
         }
     }
 }
