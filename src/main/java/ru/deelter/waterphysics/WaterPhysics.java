@@ -10,8 +10,10 @@ import ru.deelter.waterphysics.cache.BlockStateCache;
 import ru.deelter.waterphysics.cache.PlayerChunkCache;
 import ru.deelter.waterphysics.command.WaterCommand;
 import ru.deelter.waterphysics.config.PluginConfig;
+import org.bstats.bukkit.Metrics;
 import ru.deelter.waterphysics.engine.FlowEngine;
 import ru.deelter.waterphysics.engine.WaterQueue;
+import ru.deelter.waterphysics.metrics.PluginMetrics;
 import ru.deelter.waterphysics.listener.BlockListener;
 import ru.deelter.waterphysics.listener.BucketListener;
 import ru.deelter.waterphysics.listener.ChunkListener;
@@ -25,6 +27,7 @@ public final class WaterPhysics extends JavaPlugin {
     private WaterQueue        queue;
     private FlowEngine        engine;
     private BukkitTask        engineTask;
+    private Metrics           metrics;
     @Getter
     private boolean           physicsEnabled;
 
@@ -44,6 +47,8 @@ public final class WaterPhysics extends JavaPlugin {
 
         registerListeners();
 
+        metrics = PluginMetrics.start(this, config);
+
         WaterCommand cmd = new WaterCommand(this, queue);
         var cmdObj = getCommand("waterphysics");
         if (cmdObj != null) {
@@ -60,6 +65,7 @@ public final class WaterPhysics extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (metrics != null) metrics.shutdown();
         if (engineTask != null) engineTask.cancel();
 
         // SHUTDOWN SAFETY: flush remaining queue so no water blocks are left

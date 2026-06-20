@@ -17,6 +17,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("org.bstats:bstats-bukkit:3.2.1")
 }
 
 java {
@@ -32,8 +33,11 @@ tasks {
     shadowJar {
         archiveClassifier = ""
         relocate("com.github.benmanes.caffeine", "ru.deelter.waterphysics.libs.caffeine")
+        // Relocate bStats into the plugin package to avoid conflicts with other plugins.
+        relocate("org.bstats", "ru.deelter.waterphysics.libs.bstats")
         minimize {
             exclude(dependency("com.github.ben-manes.caffeine:.*"))
+            exclude(dependency("org.bstats:.*"))
         }
     }
 
