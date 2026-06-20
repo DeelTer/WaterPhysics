@@ -26,14 +26,20 @@ public final class WaterEventListener implements Listener {
 		Block from = event.getBlock();
 		Material type = from.getType();
 
-		if (type != Material.WATER && type != Material.LAVA) return;
+		boolean isWater = type == Material.WATER;
+		boolean isLava = type == Material.LAVA;
+		if (!isWater && !isLava) return;
 		if (!config.isWorldEnabled(from.getWorld().getName())) return;
+
+		// Leave lava fully vanilla unless lava physics is enabled — otherwise
+		// cancelling its flow would freeze it (the engine wouldn't process it).
+		if (isLava && !config.isLavaPhysics()) return;
 
 		event.setCancelled(true);
 
-		// In interaction-only mode water flows only when disturbed by a player action.
-		// We still cancel to prevent vanilla physics, but don't queue.
-		if (type == Material.WATER && !config.isInteractionOnly()) {
+		// In interaction-only mode the fluid flows only when disturbed by a
+		// player action. We still cancel to prevent vanilla physics, but don't queue.
+		if (!config.isInteractionOnly()) {
 			cache.preload(from);
 			cache.preload(event.getToBlock());
 			queue.enqueue(from.getWorld(), from.getX(), from.getY(), from.getZ());
@@ -46,7 +52,8 @@ public final class WaterEventListener implements Listener {
 		// must behave normally (vanilla).
 		if (!config.isWorldEnabled(event.getBlock().getWorld().getName())) return;
 		Material mat = event.getBlock().getType();
-		if (mat == Material.WATER || isSeaPlant(mat)) {
+		if (mat == Material.WATER || isSeaPlant(mat)
+				|| (mat == Material.LAVA && config.isLavaPhysics())) {
 			event.setCancelled(true);
 		}
 	}

@@ -6,8 +6,11 @@ import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.block.BlockFace;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 
@@ -64,6 +67,30 @@ public final class BlockListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        handlePiston(event.getBlocks(), event.getDirection());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        handlePiston(event.getBlocks(), event.getDirection());
+    }
+
+    /**
+     * A piston shifts blocks one step along {@code dir}, freeing their old
+     * positions. Invalidate + wake fluid neighbours at both the old cell and the
+     * cell each block moves into, so water flows into the gap. Blocks are still
+     * at their pre-move positions at MONITOR time; the engine re-reads them next
+     * tick once the move has completed.
+     */
+    private void handlePiston(List<Block> blocks, BlockFace dir) {
+        for (Block block : blocks) {
+            invalidateAndQueueNeighbours(block);
+            invalidateAndQueueNeighbours(block.getRelative(dir));
+        }
+    }
+
     private void invalidateAndQueueNeighbours(Block changed) {
         long key = BlockKey.of(changed.getX(), changed.getY(), changed.getZ());
         cache.invalidate(changed.getWorld().getUID(), key);
@@ -77,7 +104,7 @@ public final class BlockListener implements Listener {
             int ny = y + DY[i];
             int nz = z + DZ[i];
             byte ntype = cache.getType(changed.getWorld(), nx, ny, nz);
-            if (ntype == BlockStateCache.TYPE_WATER) {
+            if (ntype == BlockStateCache.TYPE_WATER || ntype == BlockStateCache.TYPE_LAVA) {
                 queue.enqueue(changed.getWorld(), nx, ny, nz);
             }
         }

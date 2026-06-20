@@ -37,7 +37,7 @@ public final class WaterPhysics extends JavaPlugin {
 
         cache     = new BlockStateCache(config);
         proximity = new PlayerChunkCache(config);
-        queue     = new WaterQueue();
+        queue     = new WaterQueue(proximity);
 
         // Only start engine if enabled in config
         if (physicsEnabled) startEngine();

@@ -12,7 +12,7 @@ enabled: true
 # Otherwise list world names: ["world", "world_nether"].
 # In worlds NOT listed, water behaves 100% vanilla (plugin does not touch it).
 worlds:
-  - "*"
+  - "world"
 
 # ---- Flow Settings ----------------------------------------
 flow:
@@ -40,7 +40,7 @@ flow:
   # Evaporate stranded thin films: a small flowing block left with nowhere to
   # flow (no fuller neighbour, no drop, no reachable drain) is removed instead
   # of hanging forever as a tiny puddle.
-  remove-puddles: true
+  remove-puddles: false
 
   # Max water "units" a film may have to still count as a removable puddle.
   # 1 = only the thinnest layer (level 7).  Higher = removes deeper leftovers.
@@ -132,6 +132,12 @@ lava:
   # Convert lava SOURCE blocks to obsidian when touched by water.
   convert-source-to-obsidian: true
 
+  # Apply the same finite-flow physics to LAVA as to water.
+  # false (default) = lava keeps 100% vanilla behaviour (never frozen).
+  # true = lava flows/drains with the conserving model (experimental).
+  # Note: lava flowing INTO water does not solidify (only water→lava reacts).
+  apply-physics: false
+
 # ---- Sounds -----------------------------------------------
 sounds:
   # Play water sounds as water flows to new blocks.
@@ -146,3 +152,16 @@ sounds:
 
   # Pitch center (randomised ±0.2 each play for variation).
   pitch: 1.0
+
+# ---- Visual Effects ---------------------------------------
+effects:
+  # Spawn water particles when water flows to a new block.
+  # Only plays near players (within the proximity radius) — pointless off-screen.
+  enabled: true
+
+  # Minimum ticks between particle bursts in the same chunk (rate limit).
+  # Lower = denser visuals, more packets. Recommended: 3-8.
+  rate-limit-ticks: 4
+
+  # Particles per burst.
+  count: 6

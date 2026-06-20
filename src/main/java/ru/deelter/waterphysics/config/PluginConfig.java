@@ -62,12 +62,18 @@ public final class PluginConfig {
     // Lava
     private final boolean convertLava;
     private final boolean convertLavaSource;
+    private final boolean lavaPhysics;
 
     // Sounds
     private final boolean soundsEnabled;
     private final int     soundRateLimitTicks;
     private final float   soundVolume;
     private final float   soundPitch;
+
+    // Visual effects
+    private final boolean effectsEnabled;
+    private final int     effectsRateLimitTicks;
+    private final int     effectsCount;
 
     public PluginConfig(FileConfiguration cfg) {
         this.enabled              = cfg.getBoolean("enabled", true);
@@ -110,11 +116,16 @@ public final class PluginConfig {
 
         this.convertLava          = cfg.getBoolean("lava.convert-to-cobblestone", true);
         this.convertLavaSource    = cfg.getBoolean("lava.convert-source-to-obsidian", true);
+        this.lavaPhysics          = cfg.getBoolean("lava.apply-physics", false);
 
         this.soundsEnabled        = cfg.getBoolean("sounds.enabled", true);
         this.soundRateLimitTicks  = Math.max(1, cfg.getInt("sounds.rate-limit-ticks", 10));
         this.soundVolume          = (float) Math.max(0.0, Math.min(1.0, cfg.getDouble("sounds.volume", 0.35)));
         this.soundPitch           = (float) Math.max(0.1, Math.min(2.0, cfg.getDouble("sounds.pitch", 1.0)));
+
+        this.effectsEnabled       = cfg.getBoolean("effects.enabled", true);
+        this.effectsRateLimitTicks = Math.max(1, cfg.getInt("effects.rate-limit-ticks", 4));
+        this.effectsCount         = Math.max(1, Math.min(50, cfg.getInt("effects.count", 6)));
     }
 
     public boolean isWorldEnabled(String worldName) {

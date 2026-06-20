@@ -71,6 +71,7 @@ public final class FlowEngine extends BukkitRunnable {
 	private final boolean playerProximityCheck;
 	private final boolean convertLava;
 	private final boolean convertLavaSource;
+	private final boolean lavaPhysics;
 	private final boolean waterlogEnabled;
 	private final int waterlogMaxLevel;
 	private final boolean biomeExclusionEnabled;
@@ -80,6 +81,9 @@ public final class FlowEngine extends BukkitRunnable {
 	private final int soundRateLimitTicks;
 	private final float soundVolume;
 	private final float soundPitch;
+	private final boolean effectsEnabled;
+	private final int effectsRateLimitTicks;
+	private final int effectsCount;
 
 	// Biome exclusion cache: keyed by 4x4x4 section position, value = is excluded.
 	// Biomes never change at runtime → safe to cache forever.
@@ -87,6 +91,8 @@ public final class FlowEngine extends BukkitRunnable {
 
 	// Sound rate-limit: chunk key → last soundTick when sound played.
 	private final Map<Long, Integer> lastSoundTick = new HashMap<>();
+	// Particle rate-limit: chunk key → last soundTick when effect played.
+	private final Map<Long, Integer> lastEffectTick = new HashMap<>();
 	private int soundTick;
 
 	// Reused BFS scratch for findDrainDir — avoids per-call allocation.
@@ -95,6 +101,14 @@ public final class FlowEngine extends BukkitRunnable {
 
 	// ---- Per-world height bounds cache -------------------------------------
 	private final Map<UUID, int[]> worldBoundsCache = new HashMap<>(); // [0]=min, [1]=max
+
+	// ---- Active fluid context for the block currently being processed ------
+	// Set at the top of processBlock; every flow/mutation helper reads these so
+	// the same finite model drives water OR lava without duplicated code.
+	// Safe as instance fields: processing is single-threaded and synchronous.
+	private byte curType = TYPE_WATER;
+	private Material curMat = Material.WATER;
+	private boolean curIsWater = true;
 
 	public FlowEngine(PluginConfig config, BlockStateCache cache,
 	                  PlayerChunkCache proximity, WaterQueue queue) {
@@ -106,6 +120,7 @@ public final class FlowEngine extends BukkitRunnable {
 		this.playerProximityCheck = config.isPlayerProximityCheck();
 		this.convertLava = config.isConvertLava();
 		this.convertLavaSource = config.isConvertLavaSource();
+		this.lavaPhysics = config.isLavaPhysics();
 		this.waterlogEnabled = config.isWaterlogEnabled();
 		this.waterlogMaxLevel = config.getWaterlogMaxLevel();
 		this.biomeExclusionEnabled = !config.getExcludedBiomes().isEmpty();
@@ -115,6 +130,9 @@ public final class FlowEngine extends BukkitRunnable {
 		this.soundRateLimitTicks = config.getSoundRateLimitTicks();
 		this.soundVolume = config.getSoundVolume();
 		this.soundPitch = config.getSoundPitch();
+		this.effectsEnabled = config.isEffectsEnabled();
+		this.effectsRateLimitTicks = config.getEffectsRateLimitTicks();
+		this.effectsCount = config.getEffectsCount();
 	}
 
 	@Override
@@ -148,28 +166,35 @@ public final class FlowEngine extends BukkitRunnable {
 			long bk = BlockKey.of(x >> 2, y >> 2, z >> 2);
 			if (biomeExcludedCache.computeIfAbsent(bk, k -> config.isBiomeExcluded(world.getBiome(x, y, z)))) return;
 		}
-		if (getType(world, x, y, z) != TYPE_WATER) return;
+		// Pick the fluid for this block: water always, lava only if enabled.
+		byte selfType = getType(world, x, y, z);
+		if (selfType == TYPE_WATER) {
+			curType = TYPE_WATER;
+			curMat = Material.WATER;
+			curIsWater = true;
+		} else if (selfType == TYPE_LAVA && lavaPhysics) {
+			curType = TYPE_LAVA;
+			curMat = Material.LAVA;
+			curIsWater = false;
+		} else {
+			return;
+		}
 
 		int u = unitsAt(world, x, y, z);
 		if (u <= 0) return;
 		final int u0 = u;
 
-		// ----- 1. Gravity: push units straight down -----------------------
+		// ----- 1. Gravity: fall to the bottom in one tick -----------------
 		int minY = minY(world);
 		int downY = y - 1;
 		if (downY >= minY) {
 			byte dt = getType(world, x, downY, z);
-			if (dt == TYPE_AIR || dt == TYPE_PLANT || dt == TYPE_WATER) {
-				int du = (dt == TYPE_WATER) ? unitsAt(world, x, downY, z) : 0;
-				if (du < 8) {
-					int move = Math.min(u, 8 - du);
-					place(world, x, downY, z, du + move);
-					u -= move;
-					if (u <= 0) {
-						place(world, x, y, z, 0); // fully drained downward
-						return;
-					}
-				}
+			boolean canFall = dt == TYPE_AIR || dt == TYPE_PLANT
+					|| (dt == curType && unitsAt(world, x, downY, z) < 8);
+			if (canFall) {
+				setAir(world, x, y, z);             // empty origin
+				addWaterFalling(world, x, y, z, u); // pour the whole column to the floor
+				return;
 			}
 		}
 
@@ -181,25 +206,27 @@ public final class FlowEngine extends BukkitRunnable {
 			int nz = z + DZ[i];
 			byte nt = getType(world, nx, y, nz);
 
-			if (nt == TYPE_LAVA && convertLava) {
+			// Water touching lava solidifies it (cobble/obsidian). Only when the
+			// active fluid is water — lava must not solidify lava neighbours.
+			if (curIsWater && nt == TYPE_LAVA && convertLava) {
 				boolean isSource = getLevel(world, nx, y, nz) == 0;
 				Material result = (isSource && convertLavaSource) ? Material.OBSIDIAN : Material.COBBLESTONE;
 				setSolid(world, nx, y, nz, result);
 				continue;
 			}
 
-			boolean passable = (nt == TYPE_AIR || nt == TYPE_PLANT || nt == TYPE_WATER);
+			boolean passable = (nt == TYPE_AIR || nt == TYPE_PLANT || nt == curType);
 			if (!passable) {
-				if (waterlogEnabled && (nt == TYPE_OTHER || nt == TYPE_WATERLOGGED)) {
+				if (waterlogEnabled && curIsWater && (nt == TYPE_OTHER || nt == TYPE_WATERLOGGED)) {
 					updateWaterlog(world, nx, y, nz, 8 - u);
 				}
 				continue;
 			}
 
-			int nu = (nt == TYPE_WATER) ? unitsAt(world, nx, y, nz) : 0;
+			int nu = (nt == curType) ? unitsAt(world, nx, y, nz) : 0;
 			if (nu < 8 && canDescend(world, nx, y, nz)) {
 				int move = Math.min(u, 8 - nu);
-				place(world, nx, y, nz, nu + move);
+				addWaterFalling(world, nx, y, nz, move);
 				u -= move;
 			}
 		}
@@ -215,7 +242,7 @@ public final class FlowEngine extends BukkitRunnable {
 				int nz = z + DZ[dir];
 				int nu = unitsAt(world, nx, y, nz);
 				if (nu < u) {
-					place(world, nx, y, nz, nu + 1);
+					addWaterFalling(world, nx, y, nz, 1);
 					u--;
 				}
 			} else {
@@ -224,10 +251,10 @@ public final class FlowEngine extends BukkitRunnable {
 					int nx = x + DX[i];
 					int nz = z + DZ[i];
 					byte nt = getType(world, nx, y, nz);
-					if (nt != TYPE_AIR && nt != TYPE_PLANT && nt != TYPE_WATER) continue;
-					int nu = (nt == TYPE_WATER) ? unitsAt(world, nx, y, nz) : 0;
+					if (nt != TYPE_AIR && nt != TYPE_PLANT && nt != curType) continue;
+					int nu = (nt == curType) ? unitsAt(world, nx, y, nz) : 0;
 					if (u - nu >= 2) {
-						place(world, nx, y, nz, nu + 1);
+						addWaterFalling(world, nx, y, nz, 1);
 						u--;
 					}
 				}
@@ -247,7 +274,7 @@ public final class FlowEngine extends BukkitRunnable {
 		// Wake the block above so it can fall into any space we just freed.
 		if (u != u0) {
 			int upY = y + 1;
-			if (upY <= maxY(world) && getType(world, x, upY, z) == TYPE_WATER) {
+			if (upY <= maxY(world) && getType(world, x, upY, z) == curType) {
 				queue.enqueue(world, x, upY, z);
 			}
 		}
@@ -257,9 +284,9 @@ public final class FlowEngine extends BukkitRunnable {
 	//  Unit <-> level conversion + conserving placement
 	// =========================================================================
 
-	/** Water "units": 8 = source (full), 1..7 = flowing, 0 = empty/air. */
+	/** Fluid "units": 8 = source (full), 1..7 = flowing, 0 = empty/air. Uses the active fluid. */
 	private int unitsAt(World world, int x, int y, int z) {
-		if (getType(world, x, y, z) != TYPE_WATER) return 0;
+		if (getType(world, x, y, z) != curType) return 0;
 		int lvl = getLevel(world, x, y, z);
 		if (lvl == 0) return 8;   // source
 		if (lvl >= 8) return 0;   // falling / invalid → treat as empty
@@ -277,7 +304,7 @@ public final class FlowEngine extends BukkitRunnable {
 		if (by < minY(world)) return false;
 		byte bt = getType(world, x, by, z);
 		if (bt == TYPE_AIR || bt == TYPE_PLANT) return true;
-		return bt == TYPE_WATER && unitsAt(world, x, by, z) < 8;
+		return bt == curType && unitsAt(world, x, by, z) < 8;
 	}
 
 	/**
@@ -331,7 +358,7 @@ public final class FlowEngine extends BukkitRunnable {
 			int nx = x + DX[i];
 			int nz = z + DZ[i];
 			byte nt = getType(world, nx, y, nz);
-			if (nt == TYPE_WATER) {
+			if (nt == curType) {
 				if (unitsAt(world, nx, y, nz) > u) return false; // a fuller neighbour
 			} else if (nt == TYPE_AIR || nt == TYPE_PLANT) {
 				if (canDescend(world, nx, y, nz)) return false;  // adjacent drop
@@ -340,11 +367,42 @@ public final class FlowEngine extends BukkitRunnable {
 		return findDrainDir(world, x, y, z) < 0; // no far drain either
 	}
 
-	/** A cell water can occupy/flow through at this height: air, plant, or non-full water. */
+	/** A cell the active fluid can occupy/flow through: air, plant, or non-full same-fluid. */
 	private boolean isFlowPassable(World world, int x, int y, int z) {
 		byte t = getType(world, x, y, z);
 		if (t == TYPE_AIR || t == TYPE_PLANT) return true;
-		return t == TYPE_WATER && unitsAt(world, x, y, z) < 8;
+		return t == curType && unitsAt(world, x, y, z) < 8;
+	}
+
+	/**
+	 * Add {@code units} of water to the column at (x,y,z), letting it fall to the
+	 * bottom in a single step. Descends through the contiguous passable column
+	 * (air / plant / non-full water), then fills from the floor upward — so a
+	 * deep drop reaches the cave floor this tick and stacks from the bottom,
+	 * instead of trickling down one block per tick or hanging in mid-air.
+	 */
+	private void addWaterFalling(World world, int x, int y, int z, int units) {
+		if (units <= 0) return;
+
+		// Find the lowest cell water can occupy in this column.
+		int floor = y;
+		int p = y - 1;
+		while (p >= minY(world)) {
+			byte t = getType(world, x, p, z);
+			if (t == TYPE_AIR || t == TYPE_PLANT) { floor = p; p--; continue; }
+			if (t == curType && unitsAt(world, x, p, z) < 8) { floor = p; p--; continue; }
+			break; // solid floor or full fluid — cannot sink past
+		}
+
+		// Fill from the bottom up; overflow backs up toward y.
+		for (int cy = floor; units > 0 && cy <= y; cy++) {
+			int existing = unitsAt(world, x, cy, z);
+			int add = Math.min(units, 8 - existing);
+			if (add > 0) {
+				place(world, x, cy, z, existing + add);
+				units -= add;
+			}
+		}
 	}
 
 	/**
@@ -355,12 +413,12 @@ public final class FlowEngine extends BukkitRunnable {
 	 */
 	private void place(World world, int x, int y, int z, int units) {
 		if (units <= 0) {
-			if (getType(world, x, y, z) == TYPE_WATER) setAir(world, x, y, z);
+			if (getType(world, x, y, z) == curType) setAir(world, x, y, z);
 			return;
 		}
 		if (units > 8) units = 8;
 		int level = (units >= 8) ? 0 : 8 - units;
-		if (getType(world, x, y, z) == TYPE_WATER) {
+		if (getType(world, x, y, z) == curType) {
 			applyLevel(world, x, y, z, level);
 		} else {
 			setWater(world, x, y, z, level);
@@ -434,25 +492,28 @@ public final class FlowEngine extends BukkitRunnable {
 		UUID wid = world.getUID();
 
 		Block block = world.getBlockAt(x, y, z);
-		if (block.getType() != Material.WATER) {
+		if (block.getType() != curMat) {
 			// Drop items for replaceable blocks (carpets, moss, plants, etc.) before flooding
 			if (!block.getType().isAir() && cache.getType(world, x, y, z) == TYPE_PLANT) {
 				block.breakNaturally();
 			}
-			block.setType(Material.WATER, false);
-			tryPlaySound(world, x, y, z);
+			block.setType(curMat, false);
+			if (curIsWater) {
+				tryPlaySound(world, x, y, z);
+				tryPlayEffect(world, x, y, z);
+			}
 		}
 		if (block.getBlockData() instanceof Levelled ld) {
 			ld.setLevel(level);
 			block.setBlockData(ld, false);
 		}
 
-		cache.putType(wid, key, TYPE_WATER);
+		cache.putType(wid, key, curType);
 		cache.putLevel(wid, key, (byte) level);
 		queue.enqueue(world, x, y, z);
 		enqueueWaterNeighbors(world, x, y, z);
 
-		if (waterlogEnabled) {
+		if (waterlogEnabled && curIsWater) {
 			// Update waterlogged state of solid neighbours
 			for (int i = 0; i < 6; i++) {
 				int nx = x + NX6[i];
@@ -473,10 +534,10 @@ public final class FlowEngine extends BukkitRunnable {
 		cache.putType(wid, key, TYPE_AIR);
 		cache.putLevel(wid, key, (byte) 0);
 
-		// Wake all surrounding water (above falls in, sides flow in, below re-checks)
+		// Wake all surrounding fluid (above falls in, sides flow in, below re-checks)
 		enqueueWaterNeighbors(world, x, y, z);
 
-		if (waterlogEnabled) {
+		if (waterlogEnabled && curIsWater) {
 			forceUnwaterlogNeighbors(world, x, y, z);
 		}
 	}
@@ -492,12 +553,12 @@ public final class FlowEngine extends BukkitRunnable {
 		UUID wid = world.getUID();
 
 		byte oldLevel = cache.getLevel(world, x, y, z);
-		if (cache.getType(world, x, y, z) == TYPE_WATER && oldLevel == (byte) level) {
+		if (cache.getType(world, x, y, z) == curType && oldLevel == (byte) level) {
 			return; // Level unchanged — do not re-queue
 		}
 
 		Block block = world.getBlockAt(x, y, z);
-		if (block.getType() == Material.WATER && block.getBlockData() instanceof Levelled ld) {
+		if (block.getType() == curMat && block.getBlockData() instanceof Levelled ld) {
 			ld.setLevel(level);
 			block.setBlockData(ld, false);
 		} else {
@@ -505,12 +566,12 @@ public final class FlowEngine extends BukkitRunnable {
 			return;
 		}
 
-		cache.putType(wid, key, TYPE_WATER);
+		cache.putType(wid, key, curType);
 		cache.putLevel(wid, key, (byte) level);
 		queue.enqueue(world, x, y, z);
 		enqueueWaterNeighbors(world, x, y, z);
 
-		if (waterlogEnabled) {
+		if (waterlogEnabled && curIsWater) {
 			for (int i = 0; i < 6; i++) {
 				int nx = x + NX6[i];
 				int ny = y + NY6[i];
@@ -534,7 +595,7 @@ public final class FlowEngine extends BukkitRunnable {
 			int ny = y + NY6[i];
 			int nz = z + NZ6[i];
 			if (ny < minY(world) || ny > maxY(world)) continue;
-			if (cache.getType(world, nx, ny, nz) == TYPE_WATER) {
+			if (cache.getType(world, nx, ny, nz) == curType) {
 				queue.enqueue(world, nx, ny, nz);
 			}
 		}
@@ -565,6 +626,29 @@ public final class FlowEngine extends BukkitRunnable {
 				SoundCategory.BLOCKS,
 				soundVolume,
 				pitch);
+	}
+
+	/**
+	 * Spawn water particles when water reaches a new block — only near players
+	 * (off-screen effects are wasted packets), rate-limited per chunk.
+	 */
+	private void tryPlayEffect(World world, int x, int y, int z) {
+		if (!effectsEnabled) return;
+		// "Near a player" = inside the proximity chunk set. When proximity is
+		// off everything counts as near, so effects still play.
+		if (playerProximityCheck && !proximity.isActive(world.getUID(), x, z)) return;
+
+		long ck = ((long) (x >> 4) << 32) | ((z >> 4) & 0xFFFFFFFFL);
+		int last = lastEffectTick.getOrDefault(ck, -effectsRateLimitTicks - 1);
+		if (soundTick - last < effectsRateLimitTicks) return;
+		lastEffectTick.put(ck, soundTick);
+
+		world.spawnParticle(
+				Particle.FALLING_WATER,
+				new Location(world, x + 0.5, y + 0.5, z + 0.5),
+				effectsCount,
+				0.3, 0.3, 0.3,
+				0.0);
 	}
 
 	// =========================================================================

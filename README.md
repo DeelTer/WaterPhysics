@@ -1,480 +1,320 @@
 # WaterPhysics
 
-Высокооптимизированный плагин реалистичной физики воды для Paper/Spigot 1.21+.
+High-performance realistic water physics plugin for Paper/Spigot 1.21+.
+
+Water behaves like a finite, mass-conserving fluid: what you pour in is what
+pours out. No duplication, no vanishing source blocks, no stranded films.
+
+---
+
+## How the flow model works
+
+Each water cell holds an integer number of **units** (1–8):
+
+| Units | Meaning              | Minecraft level |
+|-------|----------------------|-----------------|
+| 8     | source (full block)  | 0               |
+| 1–7   | flowing block        | `8 - units`     |
+| 0     | air / empty          | —               |
+
+Every operation only ever **moves** units between cells — it never creates or
+destroys them. Total volume is conserved (except deliberate puddle evaporation,
+see below).
+
+Each processed water cell, per tick:
+
+1. **Gravity** — push as many units as fit straight down.
+2. **Adjacent drain** — pour into any neighbour with a drop below it
+   (a lower floor), cascading down the column as a waterfall — never leaving
+   a film hanging in mid-air.
+3. **Drain seeking** — if sitting on a flat plane, breadth-first search
+   (up to `MAX_FLOW_NODES = 1024` cells) for the nearest spot water could
+   fall from, and crawl one unit toward it. Guarantees a body fully empties
+   whenever *any* reachable lower spot exists.
+4. **Equalize** — in a fully enclosed basin, level out with neighbours,
+   stopping at a 1-unit gradient so flat puddles stay stable (no oscillation).
+5. **Puddle removal** — a tiny film that cannot move anywhere is evaporated
+   (configurable).
+
+When a cell's level changes, **all six face-neighbour water blocks are
+re-queued**, so fuller neighbours re-evaluate and flow in. This makes the
+whole body drain progressively, ring by ring, over successive ticks — instead
+of moving once and freezing.
+
+---
 
 ## Changelog
 
+### v1.3.0 — Mass-conserving rewrite
+- ✅ **Rewritten flow engine** on a conserving unit model — pour volume equals
+  drain volume, no duplication, no leftover sources
+- ✅ **Neighbour wake on level change** — water no longer "hangs" after the
+  first ring; the whole body drains gradually
+- ✅ **Drain-seeking BFS** — water on a flat plane finds and flows toward the
+  nearest reachable drop, fully emptying toward an outlet
+- ✅ **Waterfall cascade** (`addWaterFalling`) — sideways flow over a ledge
+  falls down the column; no floating one-layer films left in mid-air
+- ✅ **Puddle evaporation** (`flow.remove-puddles`) — stranded thin films with
+  nowhere to flow are removed
+- ✅ **Explosion support** — `EntityExplodeEvent` / `BlockExplodeEvent` (TNT,
+  creeper, bed/anchor) trigger water flow into the crater
+- ✅ **Per-world whitelist fixed** — disabled worlds now keep 100% vanilla
+  water (`BlockPhysicsEvent` no longer suppressed outside managed worlds)
+
 ### v1.2.0 — Interaction-only mode + optimizations
-- ✅ **Interaction-only mode** (`flow.interaction-only: true`) — вода течёт ТОЛЬКО при взаимодействии игрока (place/break). Статическая вода (океаны, реки) не обрабатывается, экономия CPU
-- ✅ **Biome exclusion** (`optimization.excluded-biomes`) — полностью отключить физику в конкретных биомах (океан, река). Per-4×4×4 section cache для быстрой проверки
-- ✅ **Bucket mechanics** (`bucket.enabled`) — при размещении water bucket ре-квеуются все блоки в radius, позволяя воде переливаться из новой точки
-- ✅ **Block.breakNaturally()** для TYPE_PLANT при затоплении — moss carpet, carpets, grass теперь дропают предметы вместо исчезновения
-- ✅ **Sounds** (`sounds.enabled`) — BLOCK_WATER_AMBIENT с рейт-лимитом per-chunk, random pitch ±0.2
-- ✅ **Water level equalization** (`flow.equalize-water-levels`, DISABLED) — попытка сгладить уровни соседних блоков (в разработке, есть баги с дупликацией)
-- ✅ **BucketListener** — слушатель PlayerBucketEmptyEvent, deferred 1 tick для правильной синхронизации
-- ✅ **Lombok** для @Getter/@RequiredArgsConstructor, сокращение boilerplate
-- ✅ **Shadow 9.0.0** для поддержки Java 25 (class version 69)
+- ✅ **Interaction-only mode** (`flow.interaction-only: true`) — water flows
+  ONLY on player interaction (place/break). Static water (oceans, rivers) is
+  not processed, saving CPU
+- ✅ **Biome exclusion** (`optimization.excluded-biomes`) — disable physics in
+  specific biomes. Per-4×4×4 section cache for fast lookups
+- ✅ **Bucket mechanics** (`bucket.enabled`) — placing a water bucket re-queues
+  blocks in radius so water can spread from the new point
+- ✅ **`Block.breakNaturally()`** for replaceable blocks (moss carpet, carpets,
+  grass) when flooded — drops items instead of vanishing
+- ✅ **Sounds** (`sounds.enabled`) — `BLOCK_WATER_AMBIENT` with per-chunk rate
+  limit, random pitch ±0.2
+- ✅ **Lombok** for `@Getter`/`@RequiredArgsConstructor`
+- ✅ **Shadow 9.0.0** for Java 25 support (class version 69)
 
 ### v1.1.0 — Waterlogged + chunk continuity
-- ✅ **ChunkListener** — при загрузке чанка все водные блоки ре-квеуются. Критично для сценария "дыра в океане + чанк выгрузился"
-- ✅ **Waterlogged поддержка** — ступеньки, плиты, заборы и любые waterloggable блоки автоматически waterlog/unwaterlog по уровню воды рядом. Конфигурируемый порог (`waterlogged.max-level`)
-- ✅ **TYPE_WATERLOGGED** в BlockStateCache — водяные блоки отличаются от waterlogged solid блоков. Нет двойного `world.getBlockAt()` при cache miss
-- ✅ **Кеш высот мира** — `world.getMinHeight()` / `getMaxHeight()` вызывается один раз per-world, не per-block  
-- ✅ **Исправлен bug** — `startEngine()` не вызывался при `enabled: false` в config
-- ✅ **Разделены** `spreadLevel()`/`nextBlockdata()` — поведение flowSideways теперь читаемо  
-- ✅ **`mergeLevels()`** вынесен в отдельный метод — используется в обоих местах flowDown
-- ✅ **6-направленный waterlog check** — NX6/NY6/NZ6 arrays для проверки всех соседей
+- ✅ **ChunkListener** — water blocks re-queued on chunk load. Critical for the
+  "hole in the ocean + chunk unloaded" scenario
+- ✅ **Waterlogged support** — stairs, slabs, fences and any waterloggable block
+  auto waterlog/unwaterlog based on nearby water level
+  (`waterlogged.max-level`)
+- ✅ **TYPE_WATERLOGGED** in BlockStateCache — distinguishes water blocks from
+  waterlogged solid blocks
+- ✅ **World height bounds cache** — `getMinHeight()`/`getMaxHeight()` cached
+  once per world
 
 ---
 
-## История переписки
+## Performance design
 
-**Оригинальный плагин** (RealisticWater v1.9.11):
-- Использовал Block объекты как ключи в HashMap → дорогие `equals()` / `hashCode()`
-- Per-block вызовы `isNear()` с проверкой расстояния до каждого онлайн игрока → N × M sqrt() операций
-- `ArrayList` + `Collections.shuffle()` каждый вызов `getSurroundingBlocks()`
-- `arTinka()` использовал `.toString()` и string compare вместо enum switch
-- Нет дедупликации очереди — один блок мог быть заквеучен 10+ раз за тик
-- Async thread читал Block данные напрямую (unsafe в Paper)
-- `HashSet<Block>` allocations в каждой рекурсивной функции
-- Нет лимита на размер cache → memory leak при длительной игре
+Rewritten from the original `RealisticWater` for low overhead:
 
-**Новая версия (WaterPhysics v1.0.0)**:
-- ✅ Полная переписка на Gradle KTS
-- ✅ Java 21, Paper 26.1.2
-- ✅ Caffeine LRU cache с `long`-ключами (вместо Block)
-- ✅ Главный поток (zero async overhead)
-- ✅ Дедупликация очереди через `HashSet<Long>` per world
-- ✅ PlayerChunkCache — O(1) проверка вместо sqrt() per block
-- ✅ Static массивы offsets, reused HashSet в рекурсии
-- ✅ Конфигурируемые параметры, кешированные в примитивы
-- ✅ Graceful shutdown — drain очереди перед выключением
+- ✅ **Main thread only** — no async, Paper-safe Block access, zero locking
+- ✅ **Caffeine LRU cache** with `long` keys (no `Block` boxing)
+- ✅ **Queue deduplication** via per-world `HashSet<Long>` — each block queued
+  at most once before processing
+- ✅ **PlayerChunkCache** — O(1) proximity check instead of per-block `sqrt()`
+- ✅ **Static offset arrays**, reused BFS scratch sets (no per-call allocation)
+- ✅ **Config values cached as primitives** — zero YAML lookups while running
+- ✅ **Per-world height bounds cached** — no repeated world dispatch per block
 
 ---
 
-## Структура проекта
+## Project structure
 
 ```
 WaterPhysics/
-├── build.gradle.kts                     ← сборка
+├── build.gradle.kts
 ├── settings.gradle.kts
-├── .gitignore
-├── README.md                            ← этот файл
+├── README.md
 │
 └── src/main/
     ├── resources/
-    │   ├── plugin.yml                   ← метаданные плагина
-    │   └── config.yml                   ← конфиг (примеры значений)
+    │   ├── plugin.yml
+    │   └── config.yml
     │
     └── java/ru/deelter/waterphysics/
-        ├── WaterPhysics.java            ← точка входа (JavaPlugin)
+        ├── WaterPhysics.java            ← entry point (JavaPlugin)
         │
         ├── config/
-        │   └── PluginConfig.java        ← все значения конфига как примитивы
-        │                                   (обновляется только при reload)
+        │   └── PluginConfig.java        ← all config values as primitives
         │
         ├── cache/
-        │   ├── BlockStateCache.java     ← Caffeine кеш (type + level per block)
-        │   │                              uses BlockKey для long-кодирования
-        │   │                              per-world LRU с TTL и size limit
-        │   │
-        │   └── PlayerChunkCache.java    ← кеш активных chunk'ов
-        │                                   обновляется каждые 20 тиков
-        │                                   позволяет O(1) proximity check
+        │   ├── BlockStateCache.java     ← Caffeine cache (type + level per block)
+        │   └── PlayerChunkCache.java    ← active-chunk cache, O(1) proximity
         │
         ├── engine/
-        │   ├── WaterQueue.java          ← ArrayDeque + HashSet<Long> дедуп
-        │   │                              гарантирует: блок в очереди ≤1 раз
-        │   │
-        │   └── FlowEngine.java          ← главный цикл обработки воды
-        │                                   BukkitRunnable (main thread)
-        │                                   processBlock() → flowDown/flowSideways
-        │                                   рекурсивные функции для level-6/7
+        │   ├── WaterQueue.java          ← ArrayDeque + HashSet<Long> dedup
+        │   └── FlowEngine.java          ← main flow loop (main thread)
         │
         ├── listener/
-        │   ├── WaterEventListener.java  ← отменяет vanilla BlockFromTo
-        │   │                              registers water в queue
-        │   │                              prevent seagrass growth (config)
-        │   │
-        │   ├── BlockListener.java       ← cache invalidation при break/place
-        │   │                              re-queue соседей воды
-        │   │
-        │   ├── ChunkListener.java       ← rescan water при chunk load
-        │   │                              guard: не работает в interaction-only
-        │   │
-        │   └── BucketListener.java      ← player bucket placement
-        │                                   re-queue соседей при placement
+        │   ├── WaterEventListener.java  ← cancels vanilla BlockFromTo/Physics
+        │   ├── BlockListener.java       ← break/place/explosion → re-queue
+        │   ├── ChunkListener.java       ← rescan water on chunk load
+        │   └── BucketListener.java      ← bucket placement re-queue
         │
         ├── command/
         │   └── WaterCommand.java        ← /wp reload|enable|disable|stop|status
-        │                                   TabCompletion поддержка
         │
         └── util/
-            ├── BlockKey.java            ← encode (x,y,z) → long для HashMap
-            │                              bit layout: [X:26][Y:12][Z:26]
-            │
-            └── (future utilities)
-
-        ├── util/
-        │   └── BlockKey.java            ← encode (x,y,z) → long
-                                            для use as HashMap key
+            └── BlockKey.java            ← encode (x,y,z) → long for cache keys
 ```
 
 ---
 
-## Сборка
+## Build
 
 ```bash
-# Build JAR с shade Caffeine
+# Build the shaded JAR (bundles Caffeine)
 ./gradlew shadowJar
 
-# Выходной файл:
-# build/libs/WaterPhysics-1.0.0.jar
-
-# Копировать в plugins/
-cp build/libs/WaterPhysics-1.0.0.jar /path/to/server/plugins/
+# Output: build/libs/WaterPhysics-1.0.0.jar
+# Copy into your server's plugins/ folder
 ```
 
-Java 21+ требуется на машине сборки.
+Requires Java 21+ on the build machine.
 
 ---
 
-## Конфиг (`config.yml`)
+## Configuration (`config.yml`)
 
-Все значения читаются **один раз** при старте и сохраняются как примитивные поля в `PluginConfig`. При работе плагина YAML не читается — прямые field-доступы.
+All values are read **once** at startup and stored as primitive fields. The
+YAML is not read again while running — apply changes with `/wp reload`.
 
-### Основные параметры
+### Core
 
 ```yaml
-enabled: true                              # Глобальный флаг
+enabled: true                              # Global toggle
 
-worlds:
-  - "*"                                    # "*" = все миры
-                                           # Или список: ["world", "world_nether"]
+worlds:                                    # Whitelist of worlds with physics.
+  - "*"                                    # "*" (or empty) = all worlds.
+                                           # Otherwise list names: ["world", ...]
+                                           # Worlds NOT listed stay 100% vanilla.
 
 flow:
-  interaction-only: true                   # Если true: вода течёт ТОЛЬКО при break/place
-                                           # (как песок/гравий). Статическая вода не
-                                           # обрабатывается. Экономия CPU для океанов
-  
-  batch-size: 512                          # Сколько блоков обработать за тик
-                                           # Выше = быстрее вода, но больше CPU
-                                           # Рекомендация: 256-1024
+  interaction-only: true                   # Water flows ONLY on player break/place.
+                                           # Static water is not processed (saves CPU).
 
-  tick-interval: 3                         # Тики между запусками двигателя
-                                           # 1 = каждый тик, 3 = раз в 3 тика
-  
-  equalize-water-levels: false             # Если true: более полный блок водный постепенно
-                                           # поднимает уровень соседних менее полных блоков.
-                                           # ОТКЛЮЧЕНО — есть баги с дупликацией воды
+  batch-size: 512                          # Blocks processed per tick (256–1024).
+
+  tick-interval: 3                         # Ticks between engine runs (1 = every tick).
+
+  remove-puddles: true                     # Evaporate stranded thin films with
+                                           # nowhere to flow.
+
+  puddle-max-units: 1                      # Max units a film may have to count as a
+                                           # removable puddle. 1 = thinnest layer only.
 ```
 
-### Оптимизация
+### Optimization
 
 ```yaml
 optimization:
-  player-proximity-check: true             # Обработка только рядом с игроками
-                                           # true = экономия CPU, false = везде
-
-  player-proximity-chunks: 4               # Radius в chunk'ах (4 = 9x9 chunks = ~144)
-
-  cache-ttl-seconds: 60                    # Кеш-запись невалидна через N сек
-                                           # Выше = меньше world reads, больше RAM
-
-  cache-max-size: 100000                   # Max block'ов в памяти (LRU)
-                                           # 100k ≈ 3-4 MB, автоматический evict
-  
-  chunk-rescan-on-load: true               # Переквеуить воду при загрузке chunk
-                                           # Критично для ocean drain сценария
-  
-  chunk-scan-max-blocks: 2000              # Max water блоков за один rescan
-  
-  excluded-biomes:                         # Биомы где физика отключена полностью
-    - ocean                                # (ocean, deep_ocean, river, frozen_ocean и т.д.)
-    - deep_ocean                           # Пусто = физика везде
+  player-proximity-check: true             # Process only chunks near players.
+  player-proximity-chunks: 4               # Radius in chunks (4 ≈ 9×9 chunks).
+  cache-ttl-seconds: 60                    # Cache entry validity without access.
+  cache-max-size: 100000                   # Max cached block states (LRU).
+  chunk-rescan-on-load: true               # Re-queue water on chunk load.
+  chunk-scan-max-blocks: 2000              # Max water blocks re-queued per rescan.
+  excluded-biomes:                         # Biomes with physics fully disabled.
+    - ocean
+    - deep_ocean
     - river
 ```
 
-### Механика
+### Mechanics
 
 ```yaml
 waterlogged:
-  enabled: true                            # Водяные свойства соседних блоков
-                                           # (stairs, slabs, fences автоматически waterlog)
-  
-  max-level: 3                             # Уровень воды при котором блоки waterlog
-                                           # 0=source, 7=barely flowing
+  enabled: true                            # Auto waterlog/unwaterlog solid neighbours.
+  max-level: 3                             # Water level (0=source..7=thin) that
+                                           # triggers waterlogging.
 
 sea-plants:
-  remove-on-flow: true                     # Заменять seagrass/kelp на воду
-                                           # block.breakNaturally() дропит предметы
-
-  prevent-growth: true                     # Запретить рост растений
+  remove-on-flow: true                     # Replace seagrass/kelp with water (drops items).
+  prevent-growth: true                     # Stop sea plants growing/spreading.
 
 bucket:
-  enabled: true                            # Переквеуить воду при размещении bucket
-  
-  scan-radius: 8                           # Radius в блоках вокруг placement point
+  enabled: true                            # Re-queue water on bucket placement.
+  scan-radius: 8                           # Radius in blocks around placement.
 
 lava:
-  convert-to-cobblestone: true             # Лава → булыжник при контакте
-  convert-source-to-obsidian: true         # Лава-источник → обсидиан
+  convert-to-cobblestone: true             # Flowing lava → cobblestone on contact.
+  convert-source-to-obsidian: true         # Lava source → obsidian on contact.
 
 sounds:
-  enabled: true                            # Играть BLOCK_WATER_AMBIENT при потоке
-  
-  rate-limit-ticks: 10                     # Min тиков между звуками в одном chunk
-  
-  volume: 0.35                             # Громкость (0.0-1.0)
-  
-  pitch: 1.0                               # Основной pitch (±0.2 рандом)
+  enabled: true                            # Play BLOCK_WATER_AMBIENT on flow.
+  rate-limit-ticks: 10                     # Min ticks between sounds per chunk.
+  volume: 0.35                             # 0.0–1.0
+  pitch: 1.0                               # Base pitch (±0.2 random)
 ```
 
 ---
 
-## Команды
+## Commands
 
 ```
-/wp                      # Справка
-/wp reload               # Перезагрузить config.yml
-/wp enable               # Включить физику
-/wp disable              # Отключить физику
-/wp stop                 # Очистить очередь
-/wp status               # Статус + size очереди
+/wp                      # Help
+/wp reload               # Reload config.yml
+/wp enable               # Enable physics
+/wp disable              # Disable physics
+/wp stop                 # Clear the queue
+/wp status               # Status + queue size
 
-Алиасы: /waterphysics, /water
-Требуется: waterphysics.admin (опер по дефолту)
-```
-
----
-
-## Архитектура
-
-### BlockKey кодирование
-
-```java
-long key = BlockKey.of(x, y, z);
-
-// Бит-раскладка (64 bits):
-// [X: 26 bits] [Y: 12 bits] [Z: 26 bits]
-//
-// Почему:
-// - x,z: ±33M (достаточно для MC ±30M)
-// - y: ±2k (MC: -64..320)
-// - Result: primitive long ключ для HashMap/LRU
-// - Ноль boxing, ноль heap allocation на lookup
-```
-
-### BlockStateCache (Caffeine)
-
-```
-Per-world:
-  - typeCache<Long, Byte>   → материал (WATER/AIR/LAVA/PLANT/OTHER)
-  - levelCache<Long, Byte>  → уровень воды (0-7)
-
-Значения кешированы как Byte:
-  - JVM intern's Byte(-128..127) → всегда те же объекты
-  - cache.put(key, (byte)0) == cache.getIfPresent(key)
-  - Ноль allocation на hit
-
-TTL + LRU:
-  - expireAfterAccess(60s)  → inactive блоки выгружаются
-  - maximumSize(100k)       → bounded memory, LRU eviction
-```
-
-### WaterQueue дедуп
-
-```java
-// Оригинал: ConcurrentLinkedQueue → блок может быть N раз
-
-// Новое:
-ArrayDeque<Entry>              + Map<UUID, Set<Long>>
-   ↓                                         ↓
- FIFO очередь                    per-world дедуп-гвард
-
-boolean enqueue(world, x, y, z) {
-    long key = BlockKey.of(x, y, z);
-    return dedup.add(key);  // true if NEW, false if DUP
-}
-```
-
-### FlowEngine (Main thread)
-
-```
-run() каждые N тиков:
-  1. update player chunks (каждые 20 тиков)
-  2. poll batch-size blocks из queue
-  3. for each block:
-     - проверить: loaded, enabled, near player, is water
-     - if down = AIR/PLANT → flowDown()
-     - else → flowSideways()
-     - if level == 6 → giveToSevenAir()  (рекурсия)
-     - if level == 7 above source → givefromSevenUp() (рекурсия)
-
-Нет async!
-- Все world reads синхронны (на main thread)
-- Cache synchronized единственно читается
-- Paper-safe: нет конкурентного доступа к Block'ам
-```
-
-### Event listeners
-
-**WaterEventListener** → перехватывает vanilla BlockFromTo
-- Отменяет водопад (если не interaction-only, иначе just отменяет)
-- Кеширует блоки (preload)
-- Кушает в очередь
-
-**BlockListener** → синхронизирует кеш при player build/break
-- На break: invalidate + re-queue соседей
-- На place: preload + re-queue соседей
-
-**ChunkListener** → ре-квеуит воду при загрузке chunk
-- Сканирует chunk на WATER блоки
-- Переквеуит если не interaction-only
-- Guard: max-blocks per rescan
-
-**BucketListener** → обновляет воду при bucket placement
-- PlayerBucketEmptyEvent на WATER_BUCKET
-- Deferred 1 tick (placed water не в мире сразу)
-- Ре-квеуит блоки в radius вокруг placement
-
----
-
-## Модификация логики
-
-### Добавить конфиг опцию
-
-1. Добавить в `config.yml`:
-   ```yaml
-   my-feature:
-     my-param: true
-   ```
-
-2. Добавить field + getter в `PluginConfig`:
-   ```java
-   private final boolean myParam;
-   
-   public PluginConfig(FileConfiguration cfg) {
-       this.myParam = cfg.getBoolean("my-feature.my-param", true);
-   }
-   
-   public boolean isMyParam() { return myParam; }
-   ```
-
-3. Использовать в `FlowEngine`:
-   ```java
-   private final boolean myParam;  // cache locally
-   
-   public FlowEngine(...) {
-       this.myParam = config.isMyParam();
-   }
-   ```
-
-### Добавить новую механику (например, grass spread)
-
-1. Создать `GrassSpreadEngine extends BukkitRunnable`
-2. Создать listener, ловящий нужные события → queue'ить блоки
-3. В `WaterPhysics.onEnable()`:
-   ```java
-   grassEngine = new GrassSpreadEngine(config, cache, queue);
-   grassTask = grassEngine.runTaskTimer(this, 20L, 20L);
-   ```
-
----
-
-## Безопасность при перезагрузке
-
-При `/stop` или crash сервера:
-
-```java
-// WaterPhysics.onDisable()
-while (!queue.isEmpty() && drained++ < 10_000) {
-    WaterQueue.Entry entry = queue.poll();
-    flushBlockFromCache(entry.world(), ...);  // apply cache → world
-}
-```
-
-**Результат:** не остается висячей воды в неправильных состояниях.
-
----
-
-## Производительность
-
-### На что обратить внимание
-
-| Метрика | Почему | Tunning |
-|---|---|---|
-| Cache hit rate | все мелкие значения из Caffeine | `cache-ttl-seconds` выше = меньше miss, но RAM |
-| Queue size | дедуп гарантирует N блоков, не 10N | batch-size выше = меньше queue length |
-| Chunk updates | 20 тиков между обновлением proximity | хардкод; может быть параметр если нужен |
-| Player distance | ~64 chunks по config | `player-proximity-chunks` tuneable |
-
-### Профилирование
-
-Добавить в `FlowEngine.run()`:
-```java
-long start = System.nanoTime();
-// ... обработка
-long elapsed = System.nanoTime() - start;
-if (elapsed > 5_000_000) {  // >5ms
-    getLogger().warning("Slow tick: " + (elapsed / 1_000_000) + "ms");
-}
+Aliases: /waterphysics, /water
+Permission: waterphysics.admin (op by default)
 ```
 
 ---
 
-## Часто задаваемые вопросы разработчику
+## Event listeners
 
-**Q: Почему main thread, а не async?**
-A: Paper не гарантирует thread-safe доступ к Block данным. Async требует ConcurrentHashMap, синхронизацию, затраты на context switch. Main thread = простой, безопасный, fast path.
+**WaterEventListener** — intercepts vanilla water physics
+- Cancels `BlockFromToEvent` and `BlockPhysicsEvent` in managed worlds
+- Leaves non-whitelisted worlds fully vanilla
+- Prevents sea-plant growth/spread (config)
 
-**Q: Почему long ключи вместо Block объектов?**
-A: Block.equals() вычисляет хеш всего мира + координаты. Long.equals() = one instruction. Ноль boxing в Caffeine.
+**BlockListener** — syncs cache on player build/break and explosions
+- Break/place: invalidate + re-queue water neighbours
+- `EntityExplodeEvent` / `BlockExplodeEvent`: re-queue neighbours of every
+  destroyed block so water flows into the crater
 
-**Q: Как добавить свою recursive функцию вроде giveToSevenAir()?**
-A: Pre-allocate `HashSet<Long> visited` в поле, clear() перед первым вызовом, передавать в рекурсию. Никаких new HashSet() в цикле.
+**ChunkListener** — re-queues water on chunk load
+- Scans the chunk for WATER blocks (guarded by `chunk-scan-max-blocks`)
+- No effect in interaction-only mode
 
-**Q: Плагин зависает. Как debug?**
-A: Добавить System.nanoTime() в начало processBlock(). Логировать медленные блоки. Снизить batch-size в конфиге.
-
-**Q: Память растет. Что делать?**
-A: `cache-max-size` уменьшить (например, до 50k). Или `cache-ttl-seconds` понизить (например, до 30).
-
----
-
-## Требования
-
-- Java 25+
-- Paper 26.1.2+ (1.21.3+)
-- Gradle 8.0+ (для сборки)
-- Shadow Plugin 9.0.0+ (поддерживает class version 69)
+**BucketListener** — updates water on bucket placement
+- `PlayerBucketEmptyEvent`, deferred 1 tick (placed water not in world yet)
+- Re-queues blocks within `scan-radius`
 
 ---
 
+## FAQ
+
+**Q: Why main thread instead of async?**
+A: Paper does not guarantee thread-safe Block access. Main thread = simple,
+safe, fast path with no locking or context-switch cost.
+
+**Q: Why `long` keys instead of `Block` objects?**
+A: `Block.equals()`/`hashCode()` are expensive; a `long` key is a single
+comparison with zero boxing in Caffeine.
+
+**Q: Water still hangs in mid-air after old saves.**
+A: The fix prevents *creation* of floating water. Pre-existing floats only fall
+when re-processed — disturb a neighbour, or set `interaction-only: false` +
+`chunk-rescan-on-load: true`, reload, and revisit the area.
+
+**Q: Plugin lags.**
+A: Lower `batch-size`, raise `tick-interval`, or reduce
+`player-proximity-chunks`.
+
+**Q: Memory grows.**
+A: Lower `cache-max-size` (e.g. 50k) or `cache-ttl-seconds` (e.g. 30).
+
 ---
 
-## Known Issues
+## Known limitations
 
-### Water level equalization
-- **Status:** DISABLED by default (`flow.equalize-water-levels: false`)
-- **Issue:** Water duplication при попытке выравнять уровни соседних блоков
-- **Workaround:** Не включать конфиг опцию
-- **Notes:** Логика требует переработки — нельзя просто re-queue соседей без контроля потока
-
----
-
-## Версионирование
-
-Семантический версинг:
-- `1.0.0` — релиз, полная стабильность
-- `1.x.0` — новые фичи (механика, конфиги)
-- `1.0.x` — баги, оптимизация
-- `2.0.0` — breaking API change
-
-Текущая версия: **1.2.0** (WIP: equalization fix)
+- **No hydrostatic pressure / up-flow.** Communicating vessels separated by a
+  solid wall (two pools at equal surface with no path over the top within the
+  drain-search range) will not equalize through the wall. Same-plane bodies and
+  drops/ledges work fully.
 
 ---
 
-## Лицензия
+## Requirements
 
-Указать при публикации (сейчас: нет ограничений на использование).
+- Java 21+ (Java 25 supported via Shadow 9.0.0)
+- Paper 1.21.3+
+- Gradle 8.0+ (build only)
+
+---
+
+## License
+
+Unspecified (currently: no usage restrictions).
+```
