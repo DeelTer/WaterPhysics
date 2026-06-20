@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.deelter"
-version = "1.1.0"
+version = "1.o.0"
 
 repositories {
     mavenCentral()
