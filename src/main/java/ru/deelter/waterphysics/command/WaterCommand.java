@@ -59,7 +59,7 @@ public final class WaterCommand implements CommandExecutor, TabCompleter {
                     .append(Component.newline())
                     .append(Component.text("  Queue size: ", NamedTextColor.WHITE))
                     .append(Component.text(queue.size(), NamedTextColor.YELLOW))
-                    .build());
+                    .asComponent());
             }
             default -> sendHelp(sender);
         }
@@ -84,7 +84,7 @@ public final class WaterCommand implements CommandExecutor, TabCompleter {
             .append(Component.newline())
             .append(Component.text("/wp status   ", NamedTextColor.YELLOW))
             .append(Component.text("Show plugin status", NamedTextColor.WHITE))
-            .build());
+            .asComponent());
     }
 
     @Override

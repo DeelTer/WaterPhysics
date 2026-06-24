@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.deelter"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     implementation("org.bstats:bstats-bukkit:3.2.1")
 }
@@ -26,7 +26,7 @@ java {
 
 tasks {
     runServer {
-        minecraftVersion("26.1.2")
+        minecraftVersion("26.2")
         jvmArgs("-Xms2G", "-Xmx2G", "-Dcom.mojang.eula.agree=true")
     }
 

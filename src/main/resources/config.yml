@@ -12,7 +12,7 @@ enabled: true
 # Otherwise list world names: ["world", "world_nether"].
 # In worlds NOT listed, water behaves 100% vanilla (plugin does not touch it).
 worlds:
-  - "world"
+  - "castlewars"
 
 # ---- Flow Settings ----------------------------------------
 flow:
