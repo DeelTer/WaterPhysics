@@ -82,6 +82,26 @@ public final class BlockStateCache {
         levelCaches.values().forEach(Cache::invalidateAll);
     }
 
+    /**
+     * Drop every cached type/level entry inside the given block-coordinate box for one world.
+     * See {@link ru.deelter.waterphysics.engine.WaterQueue#purgeRegion} — call both together after a
+     * silent bulk block rewrite (arena snapshot restore, WorldEdit, etc.) so this engine re-reads the
+     * real world state instead of handing out pre-rewrite cached values for those cells.
+     */
+    public void purgeRegion(UUID worldId, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+        purgeRegion(typeCaches.get(worldId), minX, minY, minZ, maxX, maxY, maxZ);
+        purgeRegion(levelCaches.get(worldId), minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    private static void purgeRegion(Cache<Long, Byte> cache, int minX, int minY, int minZ,
+                                     int maxX, int maxY, int maxZ) {
+        if (cache == null) return;
+        cache.asMap().keySet().removeIf(key -> {
+            int x = BlockKey.x(key), y = BlockKey.y(key), z = BlockKey.z(key);
+            return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
+        });
+    }
+
     // ---- Type helpers -----------------------------------------------------
 
     public static byte computeType(Block block) {

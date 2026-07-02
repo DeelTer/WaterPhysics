@@ -84,7 +84,21 @@ public final class WaterPhysics extends JavaPlugin {
         getLogger().info("WaterPhysics disabled.");
     }
 
-    // ---- Public API for WaterCommand ----------------------------------------
+    // ---- Public API for other plugins ---------------------------------------
+
+    /**
+     * Purge all cached block state + pending flow entries inside a region of one world. Call this
+     * AFTER any bulk block rewrite your plugin does without firing Bukkit block events (arena
+     * snapshot restores, WorldEdit-style operations, etc.) — otherwise this engine's cache and queue
+     * keep the pre-rewrite state and can write stale water back onto the region afterward.
+     * <p>
+     * Other plugins should soft-depend on WaterPhysics and call this via
+     * {@code JavaPlugin.getPlugin(WaterPhysics.class).purgeRegion(...)}.
+     */
+    public void purgeRegion(World world, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+        cache.purgeRegion(world.getUID(), minX, minY, minZ, maxX, maxY, maxZ);
+        queue.purgeRegion(world, minX, minY, minZ, maxX, maxY, maxZ);
+    }
 
 	public void setPhysicsEnabled(boolean enabled) {
         this.physicsEnabled = enabled;

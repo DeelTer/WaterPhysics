@@ -83,4 +83,32 @@ public final class WaterQueue {
 		far.clear();
 		dedupSets.values().forEach(Set::clear);
 	}
+
+	/**
+	 * Drop every queued entry inside the given block-coordinate box for one world. For use by other
+	 * plugins that silently bulk-rewrite a region (arena snapshot restores, WorldEdit, etc.) without
+	 * firing Bukkit block events — otherwise this engine keeps processing stale pending flow entries
+	 * against the region after it's been overwritten, writing water onto whatever now occupies those
+	 * coordinates. Call {@link ru.deelter.waterphysics.cache.BlockStateCache#purgeRegion} alongside
+	 * this so the cache doesn't hand out stale state for the same cells afterward.
+	 */
+	public void purgeRegion(World world, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+		UUID wid = world.getUID();
+		Set<Long> dedup = dedupSets.get(wid);
+		java.util.function.Predicate<Entry> inRegion = e ->
+				e.world().getUID().equals(wid)
+						&& e.x() >= minX && e.x() <= maxX
+						&& e.y() >= minY && e.y() <= maxY
+						&& e.z() >= minZ && e.z() <= maxZ;
+		near.removeIf(e -> {
+			boolean hit = inRegion.test(e);
+			if (hit && dedup != null) dedup.remove(e.key());
+			return hit;
+		});
+		far.removeIf(e -> {
+			boolean hit = inRegion.test(e);
+			if (hit && dedup != null) dedup.remove(e.key());
+			return hit;
+		});
+	}
 }
