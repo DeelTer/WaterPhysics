@@ -1,6 +1,6 @@
 # WaterPhysics
 
-High-performance realistic water physics plugin for Paper/Spigot 1.21+.
+High-performance realistic water physics plugin for Paper 1.21+.
 
 Water behaves like a finite, mass-conserving fluid: what you pour in is what
 pours out. No duplication, no vanishing source blocks, no stranded films.
