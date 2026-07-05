@@ -11,11 +11,7 @@ import ru.deelter.waterphysics.cache.PlayerChunkCache;
 import ru.deelter.waterphysics.config.PluginConfig;
 import ru.deelter.waterphysics.util.BlockKey;
 
-import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static ru.deelter.waterphysics.cache.BlockStateCache.*;
 
@@ -284,7 +280,9 @@ public final class FlowEngine extends BukkitRunnable {
 	//  Unit <-> level conversion + conserving placement
 	// =========================================================================
 
-	/** Fluid "units": 8 = source (full), 1..7 = flowing, 0 = empty/air. Uses the active fluid. */
+	/**
+	 * Fluid "units": 8 = source (full), 1..7 = flowing, 0 = empty/air. Uses the active fluid.
+	 */
 	private int unitsAt(World world, int x, int y, int z) {
 		if (getType(world, x, y, z) != curType) return 0;
 		int lvl = getLevel(world, x, y, z);
@@ -367,7 +365,9 @@ public final class FlowEngine extends BukkitRunnable {
 		return findDrainDir(world, x, y, z) < 0; // no far drain either
 	}
 
-	/** A cell the active fluid can occupy/flow through: air, plant, or non-full same-fluid. */
+	/**
+	 * A cell the active fluid can occupy/flow through: air, plant, or non-full same-fluid.
+	 */
 	private boolean isFlowPassable(World world, int x, int y, int z) {
 		byte t = getType(world, x, y, z);
 		if (t == TYPE_AIR || t == TYPE_PLANT) return true;
@@ -389,8 +389,16 @@ public final class FlowEngine extends BukkitRunnable {
 		int p = y - 1;
 		while (p >= minY(world)) {
 			byte t = getType(world, x, p, z);
-			if (t == TYPE_AIR || t == TYPE_PLANT) { floor = p; p--; continue; }
-			if (t == curType && unitsAt(world, x, p, z) < 8) { floor = p; p--; continue; }
+			if (t == TYPE_AIR || t == TYPE_PLANT) {
+				floor = p;
+				p--;
+				continue;
+			}
+			if (t == curType && unitsAt(world, x, p, z) < 8) {
+				floor = p;
+				p--;
+				continue;
+			}
 			break; // solid floor or full fluid — cannot sink past
 		}
 

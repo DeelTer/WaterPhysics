@@ -59,7 +59,9 @@ public final class WaterQueue {
 		return false;
 	}
 
-	/** Poll the next block — near-player blocks first, then distant ones. */
+	/**
+	 * Poll the next block — near-player blocks first, then distant ones.
+	 */
 	public Entry poll() {
 		Entry entry = near.pollFirst();
 		if (entry == null) entry = far.pollFirst();

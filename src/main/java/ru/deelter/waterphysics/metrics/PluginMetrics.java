@@ -14,49 +14,49 @@ import ru.deelter.waterphysics.config.PluginConfig;
  */
 public final class PluginMetrics {
 
-    // https://bstats.org/what-is-my-plugin-id
-    private static final int PLUGIN_ID = 32110;
+	// https://bstats.org/what-is-my-plugin-id
+	private static final int PLUGIN_ID = 32110;
 
-    private PluginMetrics() {
-    }
+	private PluginMetrics() {
+	}
 
-    public static Metrics start(WaterPhysics plugin, PluginConfig config) {
-        Metrics metrics = new Metrics(plugin, PLUGIN_ID);
+	public static Metrics start(WaterPhysics plugin, PluginConfig config) {
+		Metrics metrics = new Metrics(plugin, PLUGIN_ID);
 
-        metrics.addCustomChart(new SimplePie("flow_mode",
-                () -> config.isInteractionOnly() ? "interaction-only" : "continuous"));
+		metrics.addCustomChart(new SimplePie("flow_mode",
+				() -> config.isInteractionOnly() ? "interaction-only" : "continuous"));
 
-        metrics.addCustomChart(new SimplePie("worlds_mode",
-                () -> config.isAllWorldsEnabled() ? "all-worlds" : "whitelist"));
+		metrics.addCustomChart(new SimplePie("worlds_mode",
+				() -> config.isAllWorldsEnabled() ? "all-worlds" : "whitelist"));
 
-        metrics.addCustomChart(new SimplePie("player_proximity_check",
-                () -> onOff(config.isPlayerProximityCheck())));
+		metrics.addCustomChart(new SimplePie("player_proximity_check",
+				() -> onOff(config.isPlayerProximityCheck())));
 
-        metrics.addCustomChart(new SimplePie("waterlogging",
-                () -> onOff(config.isWaterlogEnabled())));
+		metrics.addCustomChart(new SimplePie("waterlogging",
+				() -> onOff(config.isWaterlogEnabled())));
 
-        metrics.addCustomChart(new SimplePie("lava_physics",
-                () -> onOff(config.isLavaPhysics())));
+		metrics.addCustomChart(new SimplePie("lava_physics",
+				() -> onOff(config.isLavaPhysics())));
 
-        metrics.addCustomChart(new SimplePie("remove_puddles",
-                () -> onOff(config.isRemovePuddles())));
+		metrics.addCustomChart(new SimplePie("remove_puddles",
+				() -> onOff(config.isRemovePuddles())));
 
-        metrics.addCustomChart(new SimplePie("effects",
-                () -> onOff(config.isEffectsEnabled())));
+		metrics.addCustomChart(new SimplePie("effects",
+				() -> onOff(config.isEffectsEnabled())));
 
-        metrics.addCustomChart(new SimplePie("sounds",
-                () -> onOff(config.isSoundsEnabled())));
+		metrics.addCustomChart(new SimplePie("sounds",
+				() -> onOff(config.isSoundsEnabled())));
 
-        metrics.addCustomChart(new SimplePie("tick_interval",
-                () -> String.valueOf(config.getTickInterval())));
+		metrics.addCustomChart(new SimplePie("tick_interval",
+				() -> String.valueOf(config.getTickInterval())));
 
-        metrics.addCustomChart(new SimplePie("batch_size",
-                () -> String.valueOf(config.getBatchSize())));
+		metrics.addCustomChart(new SimplePie("batch_size",
+				() -> String.valueOf(config.getBatchSize())));
 
-        return metrics;
-    }
+		return metrics;
+	}
 
-    private static String onOff(boolean value) {
-        return value ? "enabled" : "disabled";
-    }
+	private static String onOff(boolean value) {
+		return value ? "enabled" : "disabled";
+	}
 }
