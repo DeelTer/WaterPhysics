@@ -1,8 +1,9 @@
 package ru.deelter.waterphysics.config;
 
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
 import lombok.Getter;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.block.Biome;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -83,8 +84,9 @@ public final class PluginConfig {
 
 		List<String> biomeKeys = cfg.getStringList("optimization.excluded-biomes");
 		Set<Biome> biomes = new HashSet<>();
+		var biomeRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.BIOME);
 		for (String key : biomeKeys) {
-			Biome b = Registry.BIOME.get(NamespacedKey.minecraft(key.toLowerCase()));
+			Biome b = biomeRegistry.get(NamespacedKey.minecraft(key.toLowerCase()));
 			if (b != null) biomes.add(b);
 		}
 		this.excludedBiomes = Collections.unmodifiableSet(biomes);
@@ -105,13 +107,13 @@ public final class PluginConfig {
 		this.chunkScanMaxBlocks = Math.max(100, cfg.getInt("optimization.chunk-scan-max-blocks", 2000));
 
 		this.waterlogEnabled = cfg.getBoolean("waterlogged.enabled", true);
-		this.waterlogMaxLevel = Math.min(7, Math.max(0, cfg.getInt("waterlogged.max-level", 3)));
+		this.waterlogMaxLevel = Math.clamp(cfg.getInt("waterlogged.max-level", 3), 0, 7);
 
 		this.removeSeaPlants = cfg.getBoolean("sea-plants.remove-on-flow", true);
 		this.preventSeaPlantGrowth = cfg.getBoolean("sea-plants.prevent-growth", true);
 
 		this.bucketPhysicsEnabled = cfg.getBoolean("bucket.enabled", true);
-		this.bucketScanRadius = Math.max(1, Math.min(16, cfg.getInt("bucket.scan-radius", 8)));
+		this.bucketScanRadius = Math.clamp(cfg.getInt("bucket.scan-radius", 8), 1, 16);
 
 		this.convertLava = cfg.getBoolean("lava.convert-to-cobblestone", true);
 		this.convertLavaSource = cfg.getBoolean("lava.convert-source-to-obsidian", true);
@@ -119,12 +121,12 @@ public final class PluginConfig {
 
 		this.soundsEnabled = cfg.getBoolean("sounds.enabled", true);
 		this.soundRateLimitTicks = Math.max(1, cfg.getInt("sounds.rate-limit-ticks", 10));
-		this.soundVolume = (float) Math.max(0.0, Math.min(1.0, cfg.getDouble("sounds.volume", 0.35)));
-		this.soundPitch = (float) Math.max(0.1, Math.min(2.0, cfg.getDouble("sounds.pitch", 1.0)));
+		this.soundVolume = (float) Math.clamp(cfg.getDouble("sounds.volume", 0.35), 0.0, 1.0);
+		this.soundPitch = (float) Math.clamp(cfg.getDouble("sounds.pitch", 1.0), 0.1, 2.0);
 
 		this.effectsEnabled = cfg.getBoolean("effects.enabled", true);
 		this.effectsRateLimitTicks = Math.max(1, cfg.getInt("effects.rate-limit-ticks", 4));
-		this.effectsCount = Math.max(1, Math.min(50, cfg.getInt("effects.count", 6)));
+		this.effectsCount = Math.clamp(cfg.getInt("effects.count", 6), 1, 50);
 	}
 
 	public boolean isWorldEnabled(String worldName) {
