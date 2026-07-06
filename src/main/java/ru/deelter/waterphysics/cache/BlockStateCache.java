@@ -111,6 +111,11 @@ public final class BlockStateCache {
 			case LAVA -> TYPE_LAVA;
 			case SEAGRASS, TALL_SEAGRASS, KELP, KELP_PLANT,
 			     BUBBLE_COLUMN -> TYPE_PLANT;
+			// Invisible/admin blocks — force TYPE_OTHER regardless of isSolid()/isPassable().
+			// In Paper 26.x these can return isSolid()=false, which would let water destroy them.
+			case BARRIER, STRUCTURE_VOID, STRUCTURE_BLOCK,
+			     COMMAND_BLOCK, CHAIN_COMMAND_BLOCK,
+			     REPEATING_COMMAND_BLOCK, JIGSAW -> TYPE_OTHER;
 			default -> {
 				if (block.getBlockData() instanceof Waterlogged wl && wl.isWaterlogged()) yield TYPE_WATERLOGGED;
 				// Passable blocks (grass, flowers, ferns, rails…) and non-solid thin blocks

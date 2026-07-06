@@ -437,6 +437,16 @@ public final class FlowEngine extends BukkitRunnable {
 	//  Waterlogging side-effect
 	// =========================================================================
 
+	/** Blocks that implement Waterlogged in Paper but must never be waterlogged by physics. */
+	private static boolean isNeverWaterloggable(Material mat) {
+		return switch (mat) {
+			case BARRIER, STRUCTURE_VOID, STRUCTURE_BLOCK,
+			     COMMAND_BLOCK, CHAIN_COMMAND_BLOCK,
+			     REPEATING_COMMAND_BLOCK, JIGSAW -> true;
+			default -> false;
+		};
+	}
+
 	/**
 	 * Update the waterlogged state of a solid block based on nearby water level.
 	 * Called during flowSideways when encountering TYPE_OTHER or TYPE_WATERLOGGED.
@@ -449,6 +459,9 @@ public final class FlowEngine extends BukkitRunnable {
 		if (shouldLog && ntype == TYPE_OTHER) {
 			// Only do world read if block might be waterloggable
 			Block nb = world.getBlockAt(nx, ny, nz);
+			// Barrier and similar admin/invisible blocks must never be waterlogged —
+			// even though they implement the Waterlogged interface in Paper 26.x.
+			if (isNeverWaterloggable(nb.getType())) return;
 			BlockData bd = nb.getBlockData();
 			if (bd instanceof Waterlogged wl && !wl.isWaterlogged()) {
 				wl.setWaterlogged(true);
