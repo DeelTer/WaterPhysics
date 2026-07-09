@@ -100,6 +100,30 @@ public final class WaterPhysics extends JavaPlugin {
 		queue.purgeRegion(world, minX, minY, minZ, maxX, maxY, maxZ);
 	}
 
+	/**
+	 * Wake water around a single cell whose block another plugin just changed WITHOUT firing a Bukkit
+	 * block event — e.g. a physics/collapse plugin clearing a block via {@code setType(..., false)}.
+	 * Such silent mutations are invisible to this engine's listeners, so water next to the freed gap
+	 * never re-flows and appears "stuck". Call this on the freed cell to invalidate its stale cache and
+	 * re-queue its six neighbours; the engine cheaply ignores any neighbour that isn't fluid.
+	 * <p>
+	 * Cheap and self-gating: does nothing if the world isn't managed or no fluid is nearby. Soft-depend
+	 * on WaterPhysics and call via {@code JavaPlugin.getPlugin(WaterPhysics.class).wakeArea(...)}.
+	 */
+	public void wakeArea(World world, int x, int y, int z) {
+		if (queue == null) return;
+		if (cache != null) {
+			cache.invalidate(world.getUID(), ru.deelter.waterphysics.util.BlockKey.of(x, y, z));
+		}
+		queue.enqueue(world, x, y, z);
+		queue.enqueue(world, x + 1, y, z);
+		queue.enqueue(world, x - 1, y, z);
+		queue.enqueue(world, x, y + 1, z);
+		queue.enqueue(world, x, y - 1, z);
+		queue.enqueue(world, x, y, z + 1);
+		queue.enqueue(world, x, y, z - 1);
+	}
+
 	public void setPhysicsEnabled(boolean enabled) {
 		this.physicsEnabled = enabled;
 		if (!enabled) queue.clear();
