@@ -87,6 +87,21 @@ public final class WaterPhysics extends JavaPlugin {
 	// ---- Public API for other plugins ---------------------------------------
 
 	/**
+	 * Install a veto that keeps water physics out of ground another plugin owns.
+	 *
+	 * <p>Intended for minigames: an arena between matches is a saved map, not a live world, and water
+	 * settling there quietly rewrites it for everyone who plays next. See {@link FlowGuard}.</p>
+	 */
+	public void addFlowGuard(ru.deelter.waterphysics.engine.FlowGuard guard) {
+		if (queue != null) queue.addGuard(guard);
+	}
+
+	/** Remove a previously installed veto (plugin disable / reload). */
+	public void removeFlowGuard(ru.deelter.waterphysics.engine.FlowGuard guard) {
+		if (queue != null) queue.removeGuard(guard);
+	}
+
+	/**
 	 * Purge all cached block state + pending flow entries inside a region of one world. Call this
 	 * AFTER any bulk block rewrite your plugin does without firing Bukkit block events (arena
 	 * snapshot restores, WorldEdit-style operations, etc.) — otherwise this engine's cache and queue

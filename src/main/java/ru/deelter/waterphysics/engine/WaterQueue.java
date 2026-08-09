@@ -33,6 +33,25 @@ public final class WaterQueue {
 	private final ArrayDeque<Entry> near = new ArrayDeque<>(1024);
 	private final ArrayDeque<Entry> far = new ArrayDeque<>(1024);
 	private final Map<UUID, Set<Long>> dedupSets = new HashMap<>();
+	/** Vetoes installed by other plugins — see {@link FlowGuard}. Usually empty. */
+	private final List<FlowGuard> guards = new ArrayList<>(1);
+
+	/** Install a veto. Cheap to have none: the common path is an {@code isEmpty()} check. */
+	public void addGuard(FlowGuard guard) {
+		if (guard != null && !guards.contains(guard)) guards.add(guard);
+	}
+
+	public void removeGuard(FlowGuard guard) {
+		guards.remove(guard);
+	}
+
+	private boolean suppressed(World world, int x, int y, int z) {
+		if (guards.isEmpty()) return false;
+		for (int i = 0; i < guards.size(); i++) {
+			if (guards.get(i).isSuppressed(world, x, y, z)) return true;
+		}
+		return false;
+	}
 
 	public WaterQueue(PlayerChunkCache proximity) {
 		this.proximity = proximity;
@@ -44,6 +63,8 @@ public final class WaterQueue {
 	 * @return {@code true} if the block was added, {@code false} if already queued.
 	 */
 	public boolean enqueue(World world, int x, int y, int z) {
+		// Checked before the dedup set so a vetoed block leaves no trace to clean up later.
+		if (suppressed(world, x, y, z)) return false;
 		long key = BlockKey.of(x, y, z);
 		UUID wid = world.getUID();
 		Set<Long> dedup = dedupSets.computeIfAbsent(wid, k -> new HashSet<>());
