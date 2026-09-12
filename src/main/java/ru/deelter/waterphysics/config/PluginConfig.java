@@ -124,7 +124,7 @@ public final class PluginConfig {
 		this.lavaPhysics = cfg.getBoolean("lava.apply-physics", false);
 
 		this.boatLiftEnabled = cfg.getBoolean("boats.lift-enabled", true);
-		this.boatLiftVelocity = Math.clamp(cfg.getDouble("boats.lift-velocity", 0.4), 0.05, 2.0);
+		this.boatLiftVelocity = Math.clamp(cfg.getDouble("boats.lift-velocity", 0.38), 0.05, 2.0);
 
 		this.soundsEnabled = cfg.getBoolean("sounds.enabled", true);
 		this.soundRateLimitTicks = Math.max(1, cfg.getInt("sounds.rate-limit-ticks", 10));

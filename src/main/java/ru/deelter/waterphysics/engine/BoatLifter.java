@@ -10,6 +10,7 @@ import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.Boat;
 import org.bukkit.util.Vector;
 import ru.deelter.waterphysics.config.PluginConfig;
+import org.bukkit.util.Vector;
 
 /**
  * Keeps boats afloat while the engine rewrites water levels underneath them.
@@ -17,7 +18,8 @@ import ru.deelter.waterphysics.config.PluginConfig;
  * The engine sets fluid levels with physics disabled, so a surface can jump above a boat in a single
  * write. Vanilla then classifies the boat as {@code UNDER_WATER} and sinks it (ejecting the rider).
  * After each engine pass we look at every boat in the touched worlds and, if the water surface in
- * its column is above the boat's buoyancy line, kick it upward so vanilla buoyancy takes over again.
+ * its column is above the boat's buoyancy line, add an upward push so vanilla buoyancy takes over.
+ * The push is added to the current velocity rather than replacing it, so horizontal motion survives.
  */
 final class BoatLifter {
 
@@ -43,8 +45,9 @@ final class BoatLifter {
 			if (surface - loc.getY() <= boat.getHeight() * FLOAT_DRAFT) continue;
 
 			Vector v = boat.getVelocity();
+			// Already rising fast enough — stacking pushes every run would launch the boat.
 			if (v.getY() >= liftVelocity) continue;
-			boat.setVelocity(v.setY(liftVelocity));
+			boat.setVelocity(v.add(new Vector(0, liftVelocity, 0)));
 		}
 	}
 
