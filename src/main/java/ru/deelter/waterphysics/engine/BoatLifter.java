@@ -8,6 +8,7 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.Boat;
+import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 import ru.deelter.waterphysics.config.PluginConfig;
 import org.bukkit.util.Vector;
@@ -17,7 +18,7 @@ import org.bukkit.util.Vector;
  * <p>
  * The engine sets fluid levels with physics disabled, so a surface can jump above a boat in a single
  * write. Vanilla then classifies the boat as {@code UNDER_WATER} and sinks it (ejecting the rider).
- * After each engine pass we look at every boat in the touched worlds and, if the water surface in
+ * After each engine pass we look at boats near players in the touched worlds and, if the water surface in
  * its column is above the boat's buoyancy line, add an upward push so vanilla buoyancy takes over.
  * The push is added to the current velocity rather than replacing it, so horizontal motion survives.
  */
@@ -32,23 +33,36 @@ final class BoatLifter {
 	private static final double FLOAT_DRAFT = 0.5;
 
 	private final double liftVelocity;
+	private final double checkRadius;
 
 	BoatLifter(PluginConfig config) {
 		this.liftVelocity = config.getBoatLiftVelocity();
+		this.checkRadius = config.getBoatCheckRadius();
 	}
 
+	/**
+	 * Only boats within {@code checkRadius} of a player are checked: nobody sees a boat sink elsewhere,
+	 * and the nearby lookup uses the entity section index instead of scanning every entity in the world.
+	 * A boat near two players may be visited twice — harmless, the second visit sees it already rising.
+	 */
 	void lift(World world) {
-		for (Boat boat : world.getEntitiesByClass(Boat.class)) {
-			Location loc = boat.getLocation();
-			double surface = surfaceAbove(world, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
-			if (Double.isNaN(surface)) continue;
-			if (surface - loc.getY() <= boat.getHeight() * FLOAT_DRAFT) continue;
-
-			Vector v = boat.getVelocity();
-			// Already rising fast enough — stacking pushes every run would launch the boat.
-			if (v.getY() >= liftVelocity) continue;
-			boat.setVelocity(v.add(new Vector(0, liftVelocity, 0)));
+		for (Player player : world.getPlayers()) {
+			for (Boat boat : player.getLocation().getNearbyEntitiesByType(Boat.class, checkRadius)) {
+				liftBoat(world, boat);
+			}
 		}
+	}
+
+	private void liftBoat(World world, Boat boat) {
+		Location loc = boat.getLocation();
+		double surface = surfaceAbove(world, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+		if (Double.isNaN(surface)) return;
+		if (surface - loc.getY() <= boat.getHeight() * FLOAT_DRAFT) return;
+
+		Vector v = boat.getVelocity();
+		// Already rising fast enough — stacking pushes every run would launch the boat.
+		if (v.getY() >= liftVelocity) return;
+		boat.setVelocity(v.add(new Vector(0, liftVelocity, 0)));
 	}
 
 	/**

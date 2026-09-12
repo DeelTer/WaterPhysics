@@ -148,6 +148,9 @@ boats:
   # Upward velocity added to a submerged boat (blocks/tick). Range 0.05-2.0.
   lift-velocity: 0.38
 
+  # Only boats within this many blocks of a player are checked. Range 1-128.
+  check-radius: 16
+
 # ---- Sounds -----------------------------------------------
 sounds:
   # Play water sounds as water flows to new blocks.

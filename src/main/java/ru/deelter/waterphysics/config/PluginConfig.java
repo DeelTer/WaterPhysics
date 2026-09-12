@@ -67,6 +67,7 @@ public final class PluginConfig {
 	// Boats
 	private final boolean boatLiftEnabled;
 	private final double boatLiftVelocity;
+	private final double boatCheckRadius;
 
 	// Sounds
 	private final boolean soundsEnabled;
@@ -125,6 +126,7 @@ public final class PluginConfig {
 
 		this.boatLiftEnabled = cfg.getBoolean("boats.lift-enabled", true);
 		this.boatLiftVelocity = Math.clamp(cfg.getDouble("boats.lift-velocity", 0.38), 0.05, 2.0);
+		this.boatCheckRadius = Math.clamp(cfg.getDouble("boats.check-radius", 16), 1.0, 128.0);
 
 		this.soundsEnabled = cfg.getBoolean("sounds.enabled", true);
 		this.soundRateLimitTicks = Math.max(1, cfg.getInt("sounds.rate-limit-ticks", 10));
