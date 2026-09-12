@@ -29,8 +29,12 @@ final class BoatLifter {
 	private static final double FLUID_HEIGHT_STEPS = 9.0;
 	/** Levelled levels at or above this are "falling" water, which renders as a full cell. */
 	private static final int FALLING_LEVEL = 8;
-	/** Fraction of boat height that may sit below the surface — a floating boat is partly submerged. */
-	private static final double FLOAT_DRAFT = 0.5;
+	/**
+	 * Vanilla marks a boat {@code UNDER_WATER} (and sinks it) only once fluid rises above the top of its
+	 * bounding box. A normally floating boat already sits ~65% of its height below the surface, so any
+	 * smaller threshold would kick boats that are just floating.
+	 */
+	private static final double SUBMERGED_FRACTION = 1.0;
 
 	private final double liftVelocity;
 	private final double checkRadius;
@@ -57,7 +61,7 @@ final class BoatLifter {
 		Location loc = boat.getLocation();
 		double surface = surfaceAbove(world, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
 		if (Double.isNaN(surface)) return;
-		if (surface - loc.getY() <= boat.getHeight() * FLOAT_DRAFT) return;
+		if (surface - loc.getY() <= boat.getHeight() * SUBMERGED_FRACTION) return;
 
 		Vector v = boat.getVelocity();
 		// Already rising fast enough — stacking pushes every run would launch the boat.
