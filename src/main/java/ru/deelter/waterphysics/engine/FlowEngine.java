@@ -10,6 +10,7 @@ import ru.deelter.waterphysics.cache.BlockStateCache;
 import ru.deelter.waterphysics.cache.PlayerChunkCache;
 import ru.deelter.waterphysics.config.PluginConfig;
 import ru.deelter.waterphysics.util.BlockKey;
+import ru.deelter.waterphysics.util.Faces;
 
 import java.util.*;
 
@@ -41,14 +42,16 @@ import static ru.deelter.waterphysics.cache.BlockStateCache.*;
  */
 public final class FlowEngine extends BukkitRunnable {
 
-	// Horizontal neighbour offsets: N, E, S, W
-	private static final int[] DX = {0, 1, 0, -1};
-	private static final int[] DZ = {-1, 0, 1, 0};
+	private static final int[] DX = Faces.DX;
+	private static final int[] DZ = Faces.DZ;
+	private static final int[] NX6 = Faces.DX;
+	private static final int[] NY6 = Faces.DY;
+	private static final int[] NZ6 = Faces.DZ;
 
-	// All 6 face offsets (for waterlogging side-effect check)
-	private static final int[] NX6 = {0, 1, 0, -1, 0, 0};
-	private static final int[] NY6 = {0, 0, 0, 0, 1, -1};
-	private static final int[] NZ6 = {-1, 0, 1, 0, 0, 0};
+	/** Engine runs between refreshes of the player-proximity chunk set. */
+	private static final int PROXIMITY_UPDATE_RUNS = 20;
+	/** Flow sounds are randomised within +- this around the configured pitch. */
+	private static final float SOUND_PITCH_SPREAD = 0.2f;
 
 	// Max cells visited when hunting for a downhill drain across a flat plane.
 	// Bounds cost regardless of body shape; large enough to reach a distant exit.
@@ -80,6 +83,10 @@ public final class FlowEngine extends BukkitRunnable {
 	private final boolean effectsEnabled;
 	private final int effectsRateLimitTicks;
 	private final int effectsCount;
+	private final BoatLifter boatLifter;
+
+	// Worlds whose fluid changed during the current run (for boat lifting).
+	private final Set<World> touchedWorlds = new HashSet<>(2);
 
 	// Biome exclusion cache: keyed by 4x4x4 section position, value = is excluded.
 	// Biomes never change at runtime → safe to cache forever.
@@ -129,12 +136,13 @@ public final class FlowEngine extends BukkitRunnable {
 		this.effectsEnabled = config.isEffectsEnabled();
 		this.effectsRateLimitTicks = config.getEffectsRateLimitTicks();
 		this.effectsCount = config.getEffectsCount();
+		this.boatLifter = config.isBoatLiftEnabled() ? new BoatLifter(config) : null;
 	}
 
 	@Override
 	public void run() {
 		soundTick++;
-		if (++tickCount >= 20) {
+		if (++tickCount >= PROXIMITY_UPDATE_RUNS) {
 			tickCount = 0;
 			proximity.update(Bukkit.getOnlinePlayers());
 		}
@@ -146,6 +154,11 @@ public final class FlowEngine extends BukkitRunnable {
 			WaterQueue.Entry entry = queue.poll();
 			if (entry == null) break;
 			processBlock(entry.world(), entry.x(), entry.y(), entry.z());
+		}
+
+		if (boatLifter != null && !touchedWorlds.isEmpty()) {
+			touchedWorlds.forEach(boatLifter::lift);
+			touchedWorlds.clear();
 		}
 	}
 
@@ -197,7 +210,7 @@ public final class FlowEngine extends BukkitRunnable {
 		// ----- 2. Sideways -------------------------------------------------
 		// (a) Drain straight into any directly downhill neighbour; handle lava
 		//     and waterlogging along the way.
-		for (int i = 0; i < 4 && u > 0; i++) {
+		for (int i = 0; i < Faces.HORIZONTAL && u > 0; i++) {
 			int nx = x + DX[i];
 			int nz = z + DZ[i];
 			byte nt = getType(world, nx, y, nz);
@@ -243,7 +256,7 @@ public final class FlowEngine extends BukkitRunnable {
 				}
 			} else {
 				// Truly enclosed basin → equalise to a flat puddle (stable at diff < 2).
-				for (int i = 0; i < 4 && u > 1; i++) {
+				for (int i = 0; i < Faces.HORIZONTAL && u > 1; i++) {
 					int nx = x + DX[i];
 					int nz = z + DZ[i];
 					byte nt = getType(world, nx, y, nz);
@@ -320,7 +333,7 @@ public final class FlowEngine extends BukkitRunnable {
 		bfsSeen.clear();
 		bfsSeen.add(BlockKey.of(x, 0, z));
 
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < Faces.HORIZONTAL; i++) {
 			int nx = x + DX[i];
 			int nz = z + DZ[i];
 			if (!bfsSeen.add(BlockKey.of(nx, 0, nz))) continue;
@@ -331,7 +344,7 @@ public final class FlowEngine extends BukkitRunnable {
 
 		while (!bfsQueue.isEmpty() && bfsSeen.size() < MAX_FLOW_NODES) {
 			int[] c = bfsQueue.poll();
-			for (int i = 0; i < 4; i++) {
+			for (int i = 0; i < Faces.HORIZONTAL; i++) {
 				int nx = c[0] + DX[i];
 				int nz = c[1] + DZ[i];
 				if (!bfsSeen.add(BlockKey.of(nx, 0, nz))) continue;
@@ -352,7 +365,7 @@ public final class FlowEngine extends BukkitRunnable {
 	private boolean isStrandedPuddle(World world, int x, int y, int z, int u) {
 		// Can it fall straight down?
 		if (canDescend(world, x, y, z)) return false;
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < Faces.HORIZONTAL; i++) {
 			int nx = x + DX[i];
 			int nz = z + DZ[i];
 			byte nt = getType(world, nx, y, nz);
@@ -439,12 +452,7 @@ public final class FlowEngine extends BukkitRunnable {
 
 	/** Blocks that implement Waterlogged in Paper but must never be waterlogged by physics. */
 	private static boolean isNeverWaterloggable(Material mat) {
-		return switch (mat) {
-			case BARRIER, STRUCTURE_VOID, STRUCTURE_BLOCK,
-			     COMMAND_BLOCK, CHAIN_COMMAND_BLOCK,
-			     REPEATING_COMMAND_BLOCK, JIGSAW -> true;
-			default -> false;
-		};
+		return PROTECTED_BLOCKS.contains(mat);
 	}
 
 	/**
@@ -485,7 +493,7 @@ public final class FlowEngine extends BukkitRunnable {
 	 */
 	private void forceUnwaterlogNeighbors(World world, int x, int y, int z) {
 		UUID wid = world.getUID();
-		for (int i = 0; i < 6; i++) {
+		for (int i = 0; i < Faces.ALL; i++) {
 			int nx = x + NX6[i];
 			int ny = y + NY6[i];
 			int nz = z + NZ6[i];
@@ -533,10 +541,11 @@ public final class FlowEngine extends BukkitRunnable {
 		cache.putLevel(wid, key, (byte) level);
 		queue.enqueue(world, x, y, z);
 		enqueueWaterNeighbors(world, x, y, z);
+		if (curIsWater) touchedWorlds.add(world);
 
 		if (waterlogEnabled && curIsWater) {
 			// Update waterlogged state of solid neighbours
-			for (int i = 0; i < 6; i++) {
+			for (int i = 0; i < Faces.ALL; i++) {
 				int nx = x + NX6[i];
 				int ny = y + NY6[i];
 				int nz = z + NZ6[i];
@@ -591,9 +600,10 @@ public final class FlowEngine extends BukkitRunnable {
 		cache.putLevel(wid, key, (byte) level);
 		queue.enqueue(world, x, y, z);
 		enqueueWaterNeighbors(world, x, y, z);
+		if (curIsWater) touchedWorlds.add(world);
 
 		if (waterlogEnabled && curIsWater) {
-			for (int i = 0; i < 6; i++) {
+			for (int i = 0; i < Faces.ALL; i++) {
 				int nx = x + NX6[i];
 				int ny = y + NY6[i];
 				int nz = z + NZ6[i];
@@ -611,7 +621,7 @@ public final class FlowEngine extends BukkitRunnable {
 	 * it is never re-processed and freezes mid-drain.
 	 */
 	private void enqueueWaterNeighbors(World world, int x, int y, int z) {
-		for (int i = 0; i < 6; i++) {
+		for (int i = 0; i < Faces.ALL; i++) {
 			int nx = x + NX6[i];
 			int ny = y + NY6[i];
 			int nz = z + NZ6[i];
@@ -636,11 +646,11 @@ public final class FlowEngine extends BukkitRunnable {
 
 	private void tryPlaySound(World world, int x, int y, int z) {
 		if (!soundsEnabled) return;
-		long ck = ((long) (x >> 4) << 32) | ((z >> 4) & 0xFFFFFFFFL);
+		long ck = BlockKey.chunk(x >> 4, z >> 4);
 		int last = lastSoundTick.getOrDefault(ck, -soundRateLimitTicks - 1);
 		if (soundTick - last < soundRateLimitTicks) return;
 		lastSoundTick.put(ck, soundTick);
-		float pitch = soundPitch - 0.2f + (float) (Math.random() * 0.4);
+		float pitch = soundPitch - SOUND_PITCH_SPREAD + (float) (Math.random() * 2 * SOUND_PITCH_SPREAD);
 		world.playSound(
 				new Location(world, x + 0.5, y + 0.5, z + 0.5),
 				Sound.BLOCK_WATER_AMBIENT,
@@ -659,7 +669,7 @@ public final class FlowEngine extends BukkitRunnable {
 		// off everything counts as near, so effects still play.
 		if (playerProximityCheck && !proximity.isActive(world.getUID(), x, z)) return;
 
-		long ck = ((long) (x >> 4) << 32) | ((z >> 4) & 0xFFFFFFFFL);
+		long ck = BlockKey.chunk(x >> 4, z >> 4);
 		int last = lastEffectTick.getOrDefault(ck, -effectsRateLimitTicks - 1);
 		if (soundTick - last < effectsRateLimitTicks) return;
 		lastEffectTick.put(ck, soundTick);

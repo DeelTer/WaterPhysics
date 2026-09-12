@@ -1,0 +1,145 @@
+# WaterPhysics – Modrinth Description
+
+Realistic water physics for Paper/Spigot 1.21+. Water behaves as a finite resource: what you pour in is what pours out. No duplication.
+
+---
+
+## Important Before Installing
+
+⚠️ You can use this plugin on survival servers, but be ready for resource consumption or strict configuration limits (edit via config.yml). Originally built for session-based mini-games.
+
+---
+
+## Long Description
+
+### Water that behaves like the real thing
+
+WaterPhysics rewrites water behavior on a finite resource model. Each water block holds an integer number of "units" (1–8):
+- **8 units** = source block (full)
+- **1–7 units** = flowing water
+- **0 units** = air
+
+Never creates or destroys units. Everything you pour in flows out exactly.
+
+### How it works
+
+🌊 **Gravity** – water instantly falls one tick down, filling the column from bottom to top. No slow dripping.
+
+🧊 **Level Equalization** – water levels with neighbors on the same floor. When there's an exit below, fully drains.
+
+🔍 **Drain Seeking** – water on a plateau searches for the nearest hole within ~1024 blocks and crawls toward it, draining the entire lake.
+
+💧 **Falling Sheets** – sideways flow over an edge instantly cascades down as a waterfall, never hanging mid-air.
+
+🌀 **Puddle Evaporation** – tiny single-layer films with nowhere else to flow disappear (configurable).
+
+### Supported Events
+
+💥 **Explosions** – TNT, creepers, beds, anchors blow holes; water flows into craters.
+
+🔧 **Pistons** – piston-moved blocks free up space; water seeps into gaps.
+
+🪣 **Buckets** – placing a bucket re-queues nearby water, allowing it to spread fresh.
+
+🌡️ **Lava (optional)** – if `lava.apply-physics: true`, lava flows on the same system (experimental). Default: lava stays vanilla.
+
+💧 **Waterlogging** – stairs, slabs, fences auto-waterlog at appropriate nearby water levels.
+
+🔊 **Sounds + Particles** – optional effects on water flow (particles visible only near players).
+
+### Optimizations for Survival
+
+⚡ **Main thread only** – no async, completely Paper-safe.
+
+🎯 **Player proximity check** – water processes only in loaded chunks near players. Far oceans untouched.
+
+💾 **TTL cache** – blocks forgotten from memory after 60s if unused.
+
+🚫 **Biome exclusion** – disable physics in oceans/rivers via biome list.
+
+🧩 **Interaction-only mode** – water flows only when a player breaks/places a block nearby. Static water ignored.
+
+📊 **bStats** – telemetry enabled, shows your settings (opt-out via `/opt-out`).
+
+### Commands
+
+```
+/wp                 # Help
+/wp reload          # Reload config.yml
+/wp enable|disable  # Enable/disable physics
+/wp stop            # Clear queue
+/wp status          # Status + queue size
+```
+
+Aliases: `/waterphysics`, `/water`
+Permission: `waterphysics.admin` (op by default)
+
+### Perfect For
+
+🏗️ **Survival** – realistic hydraulics, beautiful waterfalls, honest resource system
+
+🎮 **Mini-games** – configurable flooding, water traps, boat races
+
+🎨 **Creative** – water trap mechanics, parkour with waterfalls, resource generators
+
+🔗 **Redstone servers** – finite resource system enables complex hydraulic contraptions
+
+⚙️ **Factions/SkyBlock** – when tuned right, saves server resources
+
+### Requirements
+
+- Paper 1.21.3+
+- Java 21+ (Java 25 supported)
+- Gradle 8.0+ (build only)
+
+No dependencies. Works standalone.
+
+### Configuration (config.yml)
+
+```yaml
+enabled: true
+worlds: ["*"]                    # All worlds or whitelist
+
+flow:
+  interaction-only: true         # Water flows only on break/place
+  batch-size: 512                # Blocks per tick (higher = faster, more lag)
+  tick-interval: 3               # Run every N ticks
+
+optimization:
+  player-proximity-check: true   # Only near players
+  player-proximity-chunks: 4     # Radius in chunks
+  cache-ttl-seconds: 60
+  cache-max-size: 100000
+
+effects:
+  enabled: true                  # Particles on flow
+  rate-limit-ticks: 4
+
+lava:
+  apply-physics: false           # Experimental lava physics
+```
+
+Everything exposed and live-tunable via `/wp reload`.
+
+### FAQ
+
+**Q: Will this lag?**
+A: Depends on config. Default has interaction-only mode and player proximity enabled — works great on small servers. On large ones, tune `batch-size` and `tick-interval`.
+
+**Q: Water hangs, won't flow?**
+A: Likely in an excluded biome (default: `ocean`, `river`, etc.). Remove from `excluded-biomes` in config.yml.
+
+**Q: Works with vanilla pistons?**
+A: Yes. Piston pushes block → water seeps into the gap. Works for TNT, creepers, and pistons simultaneously.
+
+**Q: How much memory?**
+A: ~100k cached blocks ≈ 3–4 MB. Depends on `cache-max-size` in config.
+
+**Q: Can I use this with other water plugins?**
+A: No. Disable whichever other plugin you have. WaterPhysics cancels vanilla flow entirely in managed worlds.
+
+---
+
+📦 **Source Code**: GitHub (link in profile)
+🐛 **Issues & Support**: Report on GitHub Issues
+💬 **Questions**: Check FAQ in README first

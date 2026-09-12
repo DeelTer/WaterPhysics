@@ -12,14 +12,22 @@ import ru.deelter.waterphysics.cache.PlayerChunkCache;
 import ru.deelter.waterphysics.command.WaterCommand;
 import ru.deelter.waterphysics.config.PluginConfig;
 import ru.deelter.waterphysics.engine.FlowEngine;
+import ru.deelter.waterphysics.engine.VanillaHandoff;
 import ru.deelter.waterphysics.engine.WaterQueue;
 import ru.deelter.waterphysics.listener.BlockListener;
 import ru.deelter.waterphysics.listener.BucketListener;
 import ru.deelter.waterphysics.listener.ChunkListener;
 import ru.deelter.waterphysics.listener.WaterEventListener;
 import ru.deelter.waterphysics.metrics.PluginMetrics;
+import ru.deelter.waterphysics.util.BlockKey;
+import ru.deelter.waterphysics.util.Faces;
 
 public final class WaterPhysics extends JavaPlugin {
+
+	/** Delay before the engine's first run, giving worlds time to finish loading. */
+	private static final long ENGINE_START_DELAY_TICKS = 20L;
+	/** Upper bound on queue entries flushed on shutdown, so a huge backlog cannot hang the stop. */
+	private static final int SHUTDOWN_FLUSH_LIMIT = 10_000;
 
 	private PluginConfig config;
 	private BlockStateCache cache;
@@ -27,6 +35,7 @@ public final class WaterPhysics extends JavaPlugin {
 	private WaterQueue queue;
 	private FlowEngine engine;
 	private BukkitTask engineTask;
+	private BukkitTask handoffTask;
 	private Metrics metrics;
 	@Getter
 	private boolean physicsEnabled;
@@ -41,6 +50,7 @@ public final class WaterPhysics extends JavaPlugin {
 		cache = new BlockStateCache(config);
 		proximity = new PlayerChunkCache(config);
 		queue = new WaterQueue(proximity);
+		queue.setAccepting(physicsEnabled);
 
 		// Only start engine if enabled in config
 		if (physicsEnabled) startEngine();
@@ -67,12 +77,13 @@ public final class WaterPhysics extends JavaPlugin {
 	public void onDisable() {
 		if (metrics != null) metrics.shutdown();
 		if (engineTask != null) engineTask.cancel();
+		stopHandoff();
 
 		// SHUTDOWN SAFETY: flush remaining queue so no water blocks are left
 		// in a dangling state after a hard server restart.
 		if (queue != null && cache != null) {
 			int drained = 0;
-			while (!queue.isEmpty() && drained++ < 10_000) {
+			while (!queue.isEmpty() && drained++ < SHUTDOWN_FLUSH_LIMIT) {
 				WaterQueue.Entry entry = queue.poll();
 				if (entry == null) break;
 				flushBlockFromCache(entry.world(), entry.x(), entry.y(), entry.z());
@@ -128,20 +139,30 @@ public final class WaterPhysics extends JavaPlugin {
 	public void wakeArea(World world, int x, int y, int z) {
 		if (queue == null) return;
 		if (cache != null) {
-			cache.invalidate(world.getUID(), ru.deelter.waterphysics.util.BlockKey.of(x, y, z));
+			cache.invalidate(world.getUID(), BlockKey.of(x, y, z));
 		}
 		queue.enqueue(world, x, y, z);
-		queue.enqueue(world, x + 1, y, z);
-		queue.enqueue(world, x - 1, y, z);
-		queue.enqueue(world, x, y + 1, z);
-		queue.enqueue(world, x, y - 1, z);
-		queue.enqueue(world, x, y, z + 1);
-		queue.enqueue(world, x, y, z - 1);
+		for (int i = 0; i < Faces.ALL; i++) {
+			queue.enqueue(world, x + Faces.DX[i], y + Faces.DY[i], z + Faces.DZ[i]);
+		}
 	}
 
+	/**
+	 * Toggle physics at runtime. Disabling hands every fluid cell the engine touched back to vanilla
+	 * (see {@link VanillaHandoff}) so water flows exactly like without the plugin instead of freezing.
+	 * Enabling drops the cache, because vanilla changed fluid freely while the engine was off.
+	 */
 	public void setPhysicsEnabled(boolean enabled) {
 		this.physicsEnabled = enabled;
-		if (!enabled) queue.clear();
+		queue.setAccepting(enabled);
+		stopHandoff();
+		if (enabled) {
+			cache.clearAll();
+		} else {
+			VanillaHandoff handoff = new VanillaHandoff(cache, config.getBatchSize());
+			cache.clearAll();
+			if (!handoff.isEmpty()) handoffTask = handoff.runTaskTimer(this, 1L, 1L);
+		}
 		restartEngine();
 	}
 
@@ -159,7 +180,7 @@ public final class WaterPhysics extends JavaPlugin {
 	// ---- Internal -----------------------------------------------------------
 
 	private void registerListeners() {
-		getServer().getPluginManager().registerEvents(new WaterEventListener(config, cache, queue), this);
+		getServer().getPluginManager().registerEvents(new WaterEventListener(config, cache, queue, this), this);
 		getServer().getPluginManager().registerEvents(new BlockListener(cache, queue), this);
 		getServer().getPluginManager().registerEvents(new ChunkListener(config, cache, queue, this), this);
 		getServer().getPluginManager().registerEvents(new BucketListener(config, cache, queue, this), this);
@@ -171,7 +192,7 @@ public final class WaterPhysics extends JavaPlugin {
 
 	private void startEngine() {
 		engine = new FlowEngine(config, cache, proximity, queue);
-		engineTask = engine.runTaskTimer(this, 20L, config.getTickInterval());
+		engineTask = engine.runTaskTimer(this, ENGINE_START_DELAY_TICKS, config.getTickInterval());
 	}
 
 	private void restartEngine() {
@@ -180,6 +201,11 @@ public final class WaterPhysics extends JavaPlugin {
 			engineTask = null;
 		}
 		if (physicsEnabled) startEngine();
+	}
+
+	private void stopHandoff() {
+		if (handoffTask != null) handoffTask.cancel();
+		handoffTask = null;
 	}
 
 	/**

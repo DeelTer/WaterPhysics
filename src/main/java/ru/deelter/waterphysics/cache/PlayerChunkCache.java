@@ -3,6 +3,7 @@ package ru.deelter.waterphysics.cache;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.entity.Player;
 import ru.deelter.waterphysics.config.PluginConfig;
+import ru.deelter.waterphysics.util.BlockKey;
 
 import java.util.*;
 
@@ -45,6 +46,6 @@ public final class PlayerChunkCache {
 	}
 
 	private static long chunkKey(int cx, int cz) {
-		return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
+		return BlockKey.chunk(cx, cz);
 	}
 }

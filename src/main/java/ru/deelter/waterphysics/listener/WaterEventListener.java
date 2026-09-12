@@ -10,6 +10,7 @@ import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
+import ru.deelter.waterphysics.WaterPhysics;
 import ru.deelter.waterphysics.cache.BlockStateCache;
 import ru.deelter.waterphysics.config.PluginConfig;
 import ru.deelter.waterphysics.engine.WaterQueue;
@@ -20,6 +21,12 @@ public final class WaterEventListener implements Listener {
 	private final PluginConfig config;
 	private final BlockStateCache cache;
 	private final WaterQueue queue;
+	private final WaterPhysics plugin;
+
+	/** Physics off or world unmanaged → vanilla owns the fluid, never cancel its events. */
+	private boolean managed(Block block) {
+		return plugin.isPhysicsEnabled() && config.isWorldEnabled(block.getWorld().getName());
+	}
 
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onBlockFromTo(BlockFromToEvent event) {
@@ -29,7 +36,7 @@ public final class WaterEventListener implements Listener {
 		boolean isWater = type == Material.WATER;
 		boolean isLava = type == Material.LAVA;
 		if (!isWater && !isLava) return;
-		if (!config.isWorldEnabled(from.getWorld().getName())) return;
+		if (!managed(from)) return;
 
 		// Leave lava fully vanilla unless lava physics is enabled — otherwise
 		// cancelling its flow would freeze it (the engine wouldn't process it).
@@ -50,7 +57,7 @@ public final class WaterEventListener implements Listener {
 	public void onBlockPhysics(BlockPhysicsEvent event) {
 		// Only suppress vanilla physics in worlds we manage — elsewhere water
 		// must behave normally (vanilla).
-		if (!config.isWorldEnabled(event.getBlock().getWorld().getName())) return;
+		if (!managed(event.getBlock())) return;
 		Material mat = event.getBlock().getType();
 		if (mat == Material.WATER || isSeaPlant(mat)
 				|| (mat == Material.LAVA && config.isLavaPhysics())) {
@@ -60,7 +67,7 @@ public final class WaterEventListener implements Listener {
 
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onBlockGrow(BlockGrowEvent event) {
-		if (!config.isPreventSeaPlantGrowth()) return;
+		if (!config.isPreventSeaPlantGrowth() || !managed(event.getBlock())) return;
 		if (isSeaPlant(event.getNewState().getType())) {
 			event.setCancelled(true);
 		}
@@ -68,17 +75,13 @@ public final class WaterEventListener implements Listener {
 
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onBlockSpread(BlockSpreadEvent event) {
-		if (!config.isPreventSeaPlantGrowth()) return;
+		if (!config.isPreventSeaPlantGrowth() || !managed(event.getBlock())) return;
 		if (isSeaPlant(event.getNewState().getType())) {
 			event.setCancelled(true);
 		}
 	}
 
 	private static boolean isSeaPlant(Material mat) {
-		return mat == Material.SEAGRASS
-				|| mat == Material.TALL_SEAGRASS
-				|| mat == Material.KELP
-				|| mat == Material.KELP_PLANT
-				|| mat == Material.BUBBLE_COLUMN;
+		return BlockStateCache.SEA_PLANTS.contains(mat);
 	}
 }

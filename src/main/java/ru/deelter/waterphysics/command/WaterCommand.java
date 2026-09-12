@@ -11,11 +11,12 @@ import org.jetbrains.annotations.NotNull;
 import ru.deelter.waterphysics.WaterPhysics;
 import ru.deelter.waterphysics.engine.WaterQueue;
 
-import java.util.Arrays;
 import java.util.List;
 
 @RequiredArgsConstructor
 public final class WaterCommand implements CommandExecutor, TabCompleter {
+
+	private static final List<String> SUBCOMMANDS = List.of("reload", "enable", "disable", "stop", "status");
 
 	private final WaterPhysics plugin;
 	private final WaterQueue queue;
@@ -91,7 +92,8 @@ public final class WaterCommand implements CommandExecutor, TabCompleter {
 	public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
 	                                  @NotNull String alias, @NotNull String[] args) {
 		if (args.length == 1) {
-			return Arrays.asList("reload", "enable", "disable", "stop", "status");
+			String prefix = args[0].toLowerCase();
+			return SUBCOMMANDS.stream().filter(s -> s.startsWith(prefix)).toList();
 		}
 		return List.of();
 	}

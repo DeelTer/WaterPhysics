@@ -12,15 +12,12 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import ru.deelter.waterphysics.cache.BlockStateCache;
 import ru.deelter.waterphysics.engine.WaterQueue;
 import ru.deelter.waterphysics.util.BlockKey;
+import ru.deelter.waterphysics.util.Faces;
 
 import java.util.List;
 
 @RequiredArgsConstructor
 public final class BlockListener implements Listener {
-
-	private static final int[] DX = {0, 1, 0, -1, 0, 0};
-	private static final int[] DY = {0, 0, 0, 0, 1, -1};
-	private static final int[] DZ = {-1, 0, 1, 0, 0, 0};
 
 	private final BlockStateCache cache;
 	private final WaterQueue queue;
@@ -99,8 +96,8 @@ public final class BlockListener implements Listener {
 		// cached type here: the cache may be stale or cold and would skip real
 		// fluid, leaving the freed gap unfilled. The engine cheaply ignores any
 		// neighbour that turns out not to be a fluid.
-		for (int i = 0; i < 6; i++) {
-			queue.enqueue(changed.getWorld(), x + DX[i], y + DY[i], z + DZ[i]);
+		for (int i = 0; i < Faces.ALL; i++) {
+			queue.enqueue(changed.getWorld(), x + Faces.DX[i], y + Faces.DY[i], z + Faces.DZ[i]);
 		}
 	}
 }

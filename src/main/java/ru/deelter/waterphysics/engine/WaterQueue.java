@@ -33,6 +33,8 @@ public final class WaterQueue {
 	private final ArrayDeque<Entry> near = new ArrayDeque<>(1024);
 	private final ArrayDeque<Entry> far = new ArrayDeque<>(1024);
 	private final Map<UUID, Set<Long>> dedupSets = new HashMap<>();
+	/** While false (physics disabled) every enqueue is dropped so nothing piles up for a stopped engine. */
+	private boolean accepting = true;
 	/** Vetoes installed by other plugins — see {@link FlowGuard}. Usually empty. */
 	private final List<FlowGuard> guards = new ArrayList<>(1);
 
@@ -43,6 +45,11 @@ public final class WaterQueue {
 
 	public void removeGuard(FlowGuard guard) {
 		guards.remove(guard);
+	}
+
+	public void setAccepting(boolean accepting) {
+		this.accepting = accepting;
+		if (!accepting) clear();
 	}
 
 	private boolean suppressed(World world, int x, int y, int z) {
@@ -64,7 +71,7 @@ public final class WaterQueue {
 	 */
 	public boolean enqueue(World world, int x, int y, int z) {
 		// Checked before the dedup set so a vetoed block leaves no trace to clean up later.
-		if (suppressed(world, x, y, z)) return false;
+		if (!accepting || suppressed(world, x, y, z)) return false;
 		long key = BlockKey.of(x, y, z);
 		UUID wid = world.getUID();
 		Set<Long> dedup = dedupSets.computeIfAbsent(wid, k -> new HashSet<>());

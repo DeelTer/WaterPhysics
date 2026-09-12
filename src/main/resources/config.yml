@@ -138,6 +138,16 @@ lava:
   # Note: lava flowing INTO water does not solidify (only water→lava reacts).
   apply-physics: false
 
+# ---- Boats -----------------------------------------------
+boats:
+  # When the water level rises around a boat (e.g. a moving boat reaches a cell
+  # the engine just filled), vanilla would consider it submerged and sink it.
+  # With this on, such boats get an upward push so they pop back to the surface.
+  lift-enabled: true
+
+  # Upward velocity applied to a submerged boat (blocks/tick). Range 0.05-2.0.
+  lift-velocity: 0.4
+
 # ---- Sounds -----------------------------------------------
 sounds:
   # Play water sounds as water flows to new blocks.

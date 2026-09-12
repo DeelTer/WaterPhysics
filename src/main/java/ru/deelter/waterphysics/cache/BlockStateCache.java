@@ -11,9 +11,12 @@ import org.bukkit.block.data.Waterlogged;
 import ru.deelter.waterphysics.config.PluginConfig;
 import ru.deelter.waterphysics.util.BlockKey;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -32,6 +35,20 @@ public final class BlockStateCache {
 	public static final byte TYPE_PLANT = 3;
 	public static final byte TYPE_WATERLOGGED = 4;
 	public static final byte TYPE_OTHER = 5;
+
+	/** Underwater vegetation water may wash away (and must never be allowed to grow). */
+	public static final Set<Material> SEA_PLANTS = EnumSet.of(
+			Material.SEAGRASS, Material.TALL_SEAGRASS, Material.KELP, Material.KELP_PLANT,
+			Material.BUBBLE_COLUMN);
+
+	/**
+	 * Invisible/admin blocks physics must never destroy or waterlog. In Paper 26.x some of these
+	 * report isSolid()=false and implement Waterlogged, so they need an explicit exclusion.
+	 */
+	public static final Set<Material> PROTECTED_BLOCKS = EnumSet.of(
+			Material.BARRIER, Material.STRUCTURE_VOID, Material.STRUCTURE_BLOCK,
+			Material.COMMAND_BLOCK, Material.CHAIN_COMMAND_BLOCK, Material.REPEATING_COMMAND_BLOCK,
+			Material.JIGSAW);
 
 	private final PluginConfig config;
 
@@ -77,6 +94,13 @@ public final class BlockStateCache {
 		}
 	}
 
+	/** Visit every cached cell of the given type across all worlds (world id, encoded block key). */
+	public void forEachCached(byte type, BiConsumer<UUID, Long> action) {
+		typeCaches.forEach((wid, c) -> c.asMap().forEach((key, t) -> {
+			if (t == type) action.accept(wid, key);
+		}));
+	}
+
 	public void clearAll() {
 		typeCaches.values().forEach(Cache::invalidateAll);
 		levelCaches.values().forEach(Cache::invalidateAll);
@@ -105,35 +129,23 @@ public final class BlockStateCache {
 	// ---- Type helpers -----------------------------------------------------
 
 	public static byte computeType(Block block) {
-		return switch (block.getType()) {
-			case WATER -> TYPE_WATER;
-			case AIR, CAVE_AIR, VOID_AIR -> TYPE_AIR;
-			case LAVA -> TYPE_LAVA;
-			case SEAGRASS, TALL_SEAGRASS, KELP, KELP_PLANT,
-			     BUBBLE_COLUMN -> TYPE_PLANT;
-			// Invisible/admin blocks — force TYPE_OTHER regardless of isSolid()/isPassable().
-			// In Paper 26.x these can return isSolid()=false, which would let water destroy them.
-			case BARRIER, STRUCTURE_VOID, STRUCTURE_BLOCK,
-			     COMMAND_BLOCK, CHAIN_COMMAND_BLOCK,
-			     REPEATING_COMMAND_BLOCK, JIGSAW -> TYPE_OTHER;
-			default -> {
-				if (block.getBlockData() instanceof Waterlogged wl && wl.isWaterlogged()) yield TYPE_WATERLOGGED;
-				// Passable blocks (grass, flowers, ferns, rails…) and non-solid thin blocks
-				// (carpets, moss carpet, snow layers, lily pads…) are treated like plants —
-				// water flows through and removes them. Matches vanilla water behaviour.
-				if (block.isPassable() || !block.getType().isSolid()) yield TYPE_PLANT;
-				yield TYPE_OTHER;
-			}
-		};
+		Material mat = block.getType();
+		byte basic = materialToType(mat);
+		if (basic != TYPE_OTHER || PROTECTED_BLOCKS.contains(mat)) return basic;
+		if (block.getBlockData() instanceof Waterlogged wl && wl.isWaterlogged()) return TYPE_WATERLOGGED;
+		// Passable blocks (grass, flowers, ferns, rails…) and non-solid thin blocks
+		// (carpets, moss carpet, snow layers, lily pads…) are treated like plants —
+		// water flows through and removes them. Matches vanilla water behaviour.
+		if (block.isPassable() || !mat.isSolid()) return TYPE_PLANT;
+		return TYPE_OTHER;
 	}
 
 	public static byte materialToType(Material mat) {
+		if (SEA_PLANTS.contains(mat)) return TYPE_PLANT;
 		return switch (mat) {
 			case WATER -> TYPE_WATER;
 			case AIR, CAVE_AIR, VOID_AIR -> TYPE_AIR;
 			case LAVA -> TYPE_LAVA;
-			case SEAGRASS, TALL_SEAGRASS, KELP, KELP_PLANT,
-			     BUBBLE_COLUMN -> TYPE_PLANT;
 			default -> TYPE_OTHER;
 		};
 	}

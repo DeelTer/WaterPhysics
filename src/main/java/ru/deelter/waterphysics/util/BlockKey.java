@@ -24,6 +24,11 @@ public final class BlockKey {
 				| (long) (z & 0x3FFFFFF);
 	}
 
+	/** Packs chunk coordinates (not block coordinates) into one key. */
+	public static long chunk(int cx, int cz) {
+		return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
+	}
+
 	public static long of(Block block) {
 		return of(block.getX(), block.getY(), block.getZ());
 	}
